@@ -69,8 +69,10 @@ jobs:
           # JAGS must COMPILE Fortran, so point at the container's wasm flang
           export F77="$(val F77)" FC="$(val FC)" FLIBS="$(val FLIBS)"
           if [ -z "$F77" ]; then
-            FL=$(find /opt/flang -name "flang-new*" -type f 2>/dev/null | head -1)
+            # webr's fortran-flang.mk: EMFC = $(HOST)/bin/flang — the host flang that emits wasm
+            FL=$(ls /opt/flang/host/bin/flang 2>/dev/null || find /opt/flang -name "flang" -type f 2>/dev/null | head -1)
             echo "flang binary: $FL"
+            ls -la /opt/flang/host/bin 2>/dev/null | head
             if [ -n "$FL" ]; then
               export F77="$FL" FC="$FL"
               export FFLAGS="$(val FFLAGS) -O2 -fwasm-exceptions" FCFLAGS="$(val FCFLAGS) -O2 -fwasm-exceptions"
