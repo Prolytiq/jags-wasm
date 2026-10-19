@@ -11,6 +11,8 @@ jobs:
     container:
       image: ghcr.io/r-wasm/webr:main
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Toolchain probe
         run: |
           which emcc em++ node
