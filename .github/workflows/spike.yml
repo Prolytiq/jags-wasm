@@ -168,4 +168,14 @@ jobs:
           cd /tmp && tar czf rjags-mod.tar.gz rjags
           Rscript -e 'rwasm::build("file:///tmp/rjags-mod.tar.gz", out_dir = "/tmp/rjags-out")' 2>&1 | tail -25
           ls -la /tmp/rjags-out
-      - name: Collect artifacts (always)
+      - name: Collect artifacts (always)        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jags-wasm-artifacts
+          path: |
+            /tmp/JAGS-4.3.1/config.log
+            /tmp/JAGS-4.3.1/configure.log
+            /tmp/JAGS-4.3.1/build.log
+            /tmp/jags-wasm-install/
+            /tmp/rjags-out/
+          if-no-files-found: ignore
