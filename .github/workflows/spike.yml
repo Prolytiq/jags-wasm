@@ -42,6 +42,11 @@ jobs:
         working-directory: /tmp/JAGS-4.3.1
         run: |
           set -euo pipefail
+          # Actions run: uses a non-login shell — load the container's env profile
+          source /etc/profile 2>/dev/null || true
+          ls /etc/profile.d/ 2>/dev/null || true
+          for f in /etc/profile.d/*.sh; do source "$f" 2>/dev/null || true; done
+          env | grep -iE "em|flang|wasm" | head -20 || true
           # lift the whole toolchain out of the wasm R Makeconf (CC, CXX, FC, F77, flags, FLIBS)
           MC=$(find / -name Makeconf -path "*R*etc*" 2>/dev/null | head -1)
           val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" ; }
@@ -66,6 +71,7 @@ jobs:
         with:
           name: jags-wasm-spike-logs
           path: |
+            /tmp/JAGS-4.3.1/config.log
             /tmp/JAGS-4.3.1/configure.log
             /tmp/JAGS-4.3.1/build.log
             /tmp/jags-wasm-install/
