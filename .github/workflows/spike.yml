@@ -26,11 +26,30 @@ jobs:
           echo "=== wasm R libs (blas/lapack candidates) ==="
           find /opt/webr/wasm -name "libRlapack*" -o -name "libRblas*" 2>/dev/null | head -10
           grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
-      - name: Build webr static libs (lapack/blas for wasm)
+      - name: Build netlib BLAS+LAPACK static for wasm
         run: |
-          ls /opt/webr/libs/recipes 2>/dev/null
-          echo "=== libs Makefile (head) ==="; head -40 /opt/webr/libs/Makefile
-          echo "=== lapack recipe ==="; ls /opt/webr/libs/recipes/lapack 2>/dev/null && head -30 /opt/webr/libs/recipes/lapack/Makefile 2>/dev/null
+          set -euo pipefail
+          curl -fsSL -o /tmp/blas.tgz "https://netlib.org/blas/blas.tgz"
+          curl -fsSL -o /tmp/lapack.tgz "https://netlib.org/lapack/lapack-3.12.0.tgz"
+          tar xzf /tmp/blas.tgz -C /tmp && tar xzf /tmp/lapack.tgz -C /tmp
+          FL=/opt/flang/host/bin/flang
+          FFLAGS="-O2 --target=wasm32-unknown-emscripten -fPIC"
+          AR=emar RANLIB=emranlib
+          # BLAS: pure Fortran sources -> static archive
+          cd /tmp/BLAS
+          $FL $FFLAGS -c *.f
+          emar cr libblas.a *.o && emranlib libblas.a
+          # LAPACK: cmake build with emscripten toolchain
+          cd /tmp/lapack-3.12.0 && mkdir -p build && cd build
+          emcmake cmake .. -DCMAKE_Fortran_COMPILER=$FL \
+            -DCMAKE_Fortran_FLAGS="$FFLAGS" \
+            -DCMAKE_AR=$(which emar) -DCMAKE_RANLIB=$(which emranlib) \
+            -DCMAKE_INSTALL_PREFIX=/tmp/lapack-wasm \
+            -DBUILD_TESTING=OFF -DCBLAS=OFF -DLAPACKE=OFF \
+            -DBUILD_SHARED_LIBS=OFF 2>&1 | tail -5
+          make -j2 2>&1 | tail -5 && make install 2>&1 | tail -3
+          ls -la /tmp/lapack-wasm/lib 2>/dev/null
+          ls -la /tmp/BLAS/libblas.a
       - name: Inspect webr flang tooling
         run: |
           echo "=== /opt/flang ==="; ls -la /opt/flang 2>/dev/null || echo absent
@@ -90,18 +109,15 @@ jobs:
           echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
           # JAGS hard-requires BLAS+LAPACK; use the wasm R's own copies
           # the wasm R's own blas/lapack — find the real dir (R build layout varies)
-          # the wasm R ships libRlapack.so as an emscripten SIDE MODULE (dlopen'd by R at
-          # runtime) — it cannot be linked into a static third-party build. Use webr's own
-          # static lapack/blas builds (make libs) instead.
-          RLIBDIR=$(dirname "$(find /opt/webr -path "*wasm*" -name "liblapack.a" 2>/dev/null | head -1)")
-          test -n "$RLIBDIR" || { echo "no static liblapack.a found"; exit 1; }
+          RLIBDIR=/tmp/lapack-wasm/lib
+          test -f "$RLIBDIR/liblapack.a" || { echo "static lapack missing"; exit 1; }
           echo "RLIBDIR=$RLIBDIR"; ls -la "$RLIBDIR" | head -8
           # do NOT export LIBS globally: it leaks into the CC sanity check and fails it.
           # The blas/lapack paths go to configure via --with-* flags only (used after the CC check).
           ./configure --host=wasm32-unknown-emscripten \
             --prefix=/tmp/jags-wasm-install \
             --disable-dependency-tracking \
-            --with-blas="-L$RLIBDIR -lblas" \
+            --with-blas="-L/tmp/BLAS -lblas" \
             --with-lapack="-L$RLIBDIR -llapack" \
             2>&1 | tee configure.log
       - name: Build
