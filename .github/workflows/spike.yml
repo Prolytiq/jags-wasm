@@ -51,7 +51,9 @@ jobs:
           # container also has a native R whose Makeconf says gcc; found it the hard way)
           MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
           test -n "$MC"
-          val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" ; }
+          # strip $(MAKE_VAR) tokens — Makeconf flags carry them for R's package builds;
+          # outside make, emcc would treat them as input files ("$(LTO): No such file")
+          val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" | sed 's/\$([^)]*)//g' ; }
           export CC="$(val CC)" CXX="$(val CXX)" AR="$(val AR)" RANLIB="$(val RANLIB)"
           export F77="$(val F77)" FC="$(val FC)" FLIBS="$(val FLIBS)"
           export CFLAGS="$(val CFLAGS)" CXXFLAGS="$(val CXXFLAGS)" FFLAGS="$(val FFLAGS)" FCFLAGS="$(val FCFLAGS)" LDFLAGS="$(val LDFLAGS)"
