@@ -169,7 +169,7 @@ jobs:
           PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc -L/tmp/lapack-wasm/lib -llapack -L/tmp/BLAS-3.12.0 -lblas /opt/flang/wasm/lib/libFortranRuntime.a
           MKV
           cd /tmp && tar czf rjags-mod.tar.gz rjags
-          Rscript -e 'rwasm::build("file:///tmp/rjags", out_dir = "/tmp/rjags-out")' 2>&1 | tail -25
+          Rscript -e 'rwasm::build("/tmp/rjags", out_dir = "/tmp/rjags-out")' 2>&1 | tail -25
           ls -la /tmp/rjags-out
       - name: Collect artifacts (always)
         if: always()
