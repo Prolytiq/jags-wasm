@@ -158,6 +158,9 @@ jobs:
           set -euo pipefail
           # host R drives the wasm build via rwasm (same machinery build-rwasm uses)
           Rscript -e 'install.packages("rwasm", repos=c("https://r-wasm.r-universe.dev","https://cran.r-project.org"))' 2>&1 | tail -2
+          curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/rjags_4-16.tar.gz" || \
+            curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/Archive/rjags/rjags_4-16.tar.gz"
+          cd /tmp && tar xzf rjags.tar.gz
           # modified rjags tarball: configure removed, static Makevars pointing at our prefix
           cd /tmp/rjags
           rm -f src/configure src/configure.ac src/configure.in
