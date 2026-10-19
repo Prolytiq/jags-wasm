@@ -163,7 +163,9 @@ jobs:
           cd /tmp && tar xzf rjags.tar.gz
           # modified rjags tarball: configure removed, static Makevars pointing at our prefix
           cd /tmp/rjags
-          rm -f src/configure src/configure.ac src/configure.in
+          # rjags keeps its configure at the package ROOT; without it, R uses our
+          # static src/Makevars directly (paths are known — no detection needed)
+          rm -f configure configure.ac configure.in
           cat > src/Makevars <<'MKV'
           PKG_CPPFLAGS = -I/tmp/jags-wasm-install/include
           PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc -L/tmp/lapack-wasm/lib -llapack -L/tmp/BLAS-3.12.0 -lblas /opt/flang/wasm/lib/libFortranRuntime.a
