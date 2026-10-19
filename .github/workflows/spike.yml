@@ -24,7 +24,7 @@ jobs:
           MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
           echo "Makeconf: $MC"
           echo "=== wasm R libs (blas/lapack candidates) ==="
-          find /opt/webr -name "libRlapack*" -o -name "libRblas*" 2>/dev/null | head -10
+          find /opt/webr/wasm -name "libRlapack*" -o -name "libRblas*" 2>/dev/null | head -10
           grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
       - name: Inspect webr flang tooling
         run: |
@@ -85,9 +85,10 @@ jobs:
           echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
           # JAGS hard-requires BLAS+LAPACK; use the wasm R's own copies
           # the wasm R's own blas/lapack — find the real dir (R build layout varies)
-          RLIBDIR=$(dirname "$(find /opt/webr -name "libRlapack*" 2>/dev/null | head -1)")
+          RLIBDIR=$(dirname "$(find /opt/webr/wasm -name "libRlapack*" 2>/dev/null | head -1)")
           echo "RLIBDIR=$RLIBDIR"; ls -la "$RLIBDIR" | head -8
-          export LIBS="-L$RLIBDIR -lRlapack -lRblas $FLIBS"
+          # do NOT export LIBS globally: it leaks into the CC sanity check and fails it.
+          # The blas/lapack paths go to configure via --with-* flags only (used after the CC check).
           ./configure --host=wasm32-unknown-emscripten \
             --prefix=/tmp/jags-wasm-install \
             --disable-dependency-tracking \
