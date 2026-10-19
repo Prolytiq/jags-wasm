@@ -17,9 +17,9 @@ jobs:
           emcc --version | head -1
           which flang-new || true
           # find the wasm R's Makeconf and print its toolchain lines (source of truth)
-          MC=$(find / -name Makeconf -path "*R*etc*" 2>/dev/null | head -1)
+          MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
           echo "Makeconf: $MC"
-          grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS) *=" "$MC" || true
+          grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
       - name: Download JAGS source
         run: |
           set -euo pipefail
@@ -47,8 +47,10 @@ jobs:
           ls /etc/profile.d/ 2>/dev/null || true
           for f in /etc/profile.d/*.sh; do source "$f" 2>/dev/null || true; done
           env | grep -iE "em|flang|wasm" | head -20 || true
-          # lift the whole toolchain out of the wasm R Makeconf (CC, CXX, FC, F77, flags, FLIBS)
-          MC=$(find / -name Makeconf -path "*R*etc*" 2>/dev/null | head -1)
+          # lift the whole toolchain out of the WASM R Makeconf (explicit path — the
+          # container also has a native R whose Makeconf says gcc; found it the hard way)
+          MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
+          test -n "$MC"
           val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" ; }
           export CC="$(val CC)" CXX="$(val CXX)" AR="$(val AR)" RANLIB="$(val RANLIB)"
           export F77="$(val F77)" FC="$(val FC)" FLIBS="$(val FLIBS)"
