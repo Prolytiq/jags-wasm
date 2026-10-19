@@ -39,17 +39,15 @@ jobs:
           cd /tmp/BLAS-3.12.0
           $FL $FFLAGS -c *.f
           emar cr libblas.a *.o && emranlib libblas.a
-          # LAPACK: cmake build with emscripten toolchain
-          cd /tmp/lapack-3.12.0 && mkdir -p build && cd build
-          emcmake cmake .. -DCMAKE_Fortran_COMPILER=$FL \
-            -DCMAKE_Fortran_FLAGS="$FFLAGS" \
-            -DCMAKE_AR=$(which emar) -DCMAKE_RANLIB=$(which emranlib) \
-            -DCMAKE_INSTALL_PREFIX=/tmp/lapack-wasm \
-            -DBUILD_TESTING=OFF -DCBLAS=OFF -DLAPACKE=OFF \
-            -DBUILD_SHARED_LIBS=OFF 2>&1 | tail -5
-          make -j2 2>&1 | tail -5 && make install 2>&1 | tail -3
-          ls -la /tmp/lapack-wasm/lib 2>/dev/null
-          ls -la /tmp/BLAS/libblas.a
+          # LAPACK: plain make (cmake chokes on enable_language(Fortran) cross-compiling)
+          cd /tmp/lapack-3.12.0
+          cp INSTALL/make.inc.example make.inc
+          sed -i 's|^FORTRAN  *= .*|FORTRAN = /opt/flang/host/bin/flang|; s|^OPTS     *= .*|OPTS = -O2 --target=wasm32-unknown-emscripten -fPIC|; s|^NOOPT    *= .*|NOOPT = -O0 --target=wasm32-unknown-emscripten -fPIC|; s|^LOADER   *= .*|LOADER = /opt/flang/host/bin/flang|; s|^ARCH     *= .*|ARCH = emar|; s|^RANLIB   *= .*|RANLIB = emranlib|' make.inc
+          make lapacklib -j2 2>&1 | tail -5
+          cp liblapack.a /tmp/lapack-wasm-liblapack.a
+          mkdir -p /tmp/lapack-wasm/lib
+          mv /tmp/lapack-wasm-liblapack.a /tmp/lapack-wasm/lib/liblapack.a
+          ls -la /tmp/lapack-wasm/lib /tmp/BLAS-3.12.0/libblas.a
       - name: Inspect webr flang tooling
         run: |
           echo "=== /opt/flang ==="; ls -la /opt/flang 2>/dev/null || echo absent
