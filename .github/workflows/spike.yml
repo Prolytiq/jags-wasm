@@ -134,8 +134,24 @@ jobs:
         working-directory: /tmp/JAGS-4.3.1
         run: |
           set -euo pipefail
-          make -j2 2>&1 | tee build.log
-          make install
+          # libjags + jrmath + all 8 modules compile to wasm. The jags-terminal binary
+          # does NOT link (libtool dlpreopen is incompatible with emscripten) — and is
+          # not needed: rjags uses libjags + modules directly (Phase 1).
+          make -C src/jrmath -j2 2>&1 | tail -3
+          make -C src/lib -j2 2>&1 | tail -3
+          make -C src/modules -j2 2>&1 | tail -3
+      - name: Install to prefix (libjags, modules, headers)
+        working-directory: /tmp/JAGS-4.3.1
+        run: |
+          set -euo pipefail
+          P=/tmp/jags-wasm-install
+          mkdir -p $P/lib/jags/modules $P/include
+          cp -r src/include/* $P/include/
+          cp src/lib/.libs/libjags.a $P/lib/
+          cp src/jrmath/.libs/libjrmath.a $P/lib/
+          find src/modules -name "*.a" -path "*.libs*" -exec cp {} $P/lib/jags/modules/ \;
+          cp libltdl/.libs/libltdlc.a $P/lib/
+          ls -la $P/lib $P/lib/jags/modules | head -20
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
