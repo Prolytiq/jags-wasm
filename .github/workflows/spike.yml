@@ -150,7 +150,8 @@ jobs:
           cp src/lib/.libs/libjags.a $P/lib/
           cp src/jrmath/.libs/libjrmath.a $P/lib/
           find src/modules -name "*.a" -path "*.libs*" -exec cp {} $P/lib/jags/modules/ \;
-          cp libltdl/.libs/libltdlc.a $P/lib/
+          find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" 2>/dev/null | head -3
+          find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \; 2>/dev/null || true
           ls -la $P/lib $P/lib/jags/modules | head -20
       - name: Collect artifacts (always)
         if: always()
