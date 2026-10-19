@@ -72,6 +72,8 @@ jobs:
             curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.guess "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.guess"
           fi
           grep -q emscripten /tmp/JAGS-4.3.1/config.sub || { echo "config.sub still does not know emscripten"; exit 1; }
+      - name: Patch JAGS for C++17 (std::binary_function/bind2nd removed in C++17)
+        run: patch -p1 -d /tmp < "$GITHUB_WORKSPACE/patches/disttab-cxx17.patch"
       - name: Configure JAGS for emscripten
         working-directory: /tmp/JAGS-4.3.1
         run: |

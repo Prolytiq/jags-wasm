@@ -1,0 +1,41 @@
+--- a/JAGS-4.3.1/src/lib/distribution/DistTab.cc	2022-04-08 12:31:24
++++ b/JAGS-4.3.1/src/lib/distribution/DistTab.cc	2026-10-19 19:06:50
+@@ -5,7 +5,6 @@
+ #include <algorithm>
+ 
+ using std::string;
+-using std::binary_function;
+ using std::find_if;
+ 
+ namespace jags {
+@@ -13,7 +12,7 @@
+ typedef std::list<DistPtr> DistList;
+ 
+ // Adaptable binary predicate for find_if algorithm 
+-struct isDistName: public binary_function<DistPtr, string, bool> 
++struct isDistName 
+ {
+     bool operator()(DistPtr const &dist, string const &name) const
+     {
+@@ -28,7 +27,7 @@
+ };
+ 
+ // Adaptable binary predicate for find_if algorithm 
+-struct isDistAlias: public binary_function<DistPtr, string, bool> 
++struct isDistAlias 
+ {
+     bool operator()(DistPtr const &dist, string const &name) const
+     {
+@@ -63,10 +62,10 @@
+ DistPtr const &DistTab::find(string const &name) const
+ {
+     DistList::const_iterator p = 
+-	find_if(_dlist.begin(), _dlist.end(), bind2nd(isDistName(), name));
++	find_if(_dlist.begin(), _dlist.end(), std::bind(isDistName(), std::placeholders::_1, name));
+ 
+     if (p == _dlist.end()) {
+-	p = find_if(_dlist.begin(), _dlist.end(), bind2nd(isDistAlias(), name));
++	p = find_if(_dlist.begin(), _dlist.end(), std::bind(isDistAlias(), std::placeholders::_1, name));
+     }
+ 
+     return (p == _dlist.end()) ? _nulldist : *p;
