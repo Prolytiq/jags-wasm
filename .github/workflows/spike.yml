@@ -22,8 +22,15 @@ jobs:
       - name: Refresh autotools config (recognize wasm32-unknown-emscripten)
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/JAGS-4.3.1/config.sub "https://git.savannah.gnu.org/cgit/config.git/plain/config.sub"
-          curl -fsSL -o /tmp/JAGS-4.3.1/config.guess "https://git.savannah.gnu.org/cgit/config.git/plain/config.guess"
+          # local autoconf copy first (no network flakiness); GNU savannah as fallback
+          if [ -f /usr/share/misc/config.sub ]; then
+            cp /usr/share/misc/config.sub /tmp/JAGS-4.3.1/config.sub
+            cp /usr/share/misc/config.guess /tmp/JAGS-4.3.1/config.guess
+          else
+            curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.sub "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.sub"
+            curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.guess "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.guess"
+          fi
+          grep -q emscripten /tmp/JAGS-4.3.1/config.sub || { echo "config.sub still does not know emscripten"; exit 1; }
       - name: Configure JAGS for emscripten
         working-directory: /tmp/JAGS-4.3.1
         run: |
