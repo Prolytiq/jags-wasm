@@ -12,22 +12,24 @@ jobs:
       image: ghcr.io/r-wasm/webr:main
     steps:
       - name: Toolchain probe
-        run: |
-          which emcc em++ R flang-new 2>&1 || true
-          emcc --version | head -1
-          node --version
+        run: which emcc em++ node && emcc --version | head -1
       - name: Download JAGS source
         run: |
+          set -euo pipefail
           curl -fsSL -o /tmp/jags.tar.gz \
             "https://downloads.sourceforge.net/project/mcmc-jags/JAGS/4.x/Source/JAGS-4.3.1.tar.gz"
           tar xzf /tmp/jags.tar.gz -C /tmp
+      - name: Refresh autotools config (recognize wasm32-unknown-emscripten)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/JAGS-4.3.1/config.sub "https://git.savannah.gnu.org/cgit/config.git/plain/config.sub"
+          curl -fsSL -o /tmp/JAGS-4.3.1/config.guess "https://git.savannah.gnu.org/cgit/config.git/plain/config.guess"
       - name: Configure JAGS for emscripten
         working-directory: /tmp/JAGS-4.3.1
         run: |
-          set -x
+          set -euo pipefail
           export CC=emcc CXX=em++ AR=emar RANLIB=emranlib
           export CFLAGS="-O2 -fexceptions" CXXFLAGS="-O2 -fexceptions"
-          export LIBS="-L/opt/R/wasm/lib -llapack -lblas" || true
           ./configure --host=wasm32-unknown-emscripten \
             --prefix=/tmp/jags-wasm-install \
             --disable-dependency-tracking \
@@ -36,6 +38,7 @@ jobs:
       - name: Build
         working-directory: /tmp/JAGS-4.3.1
         run: |
+          set -euo pipefail
           make -j2 2>&1 | tee build.log
           make install
       - name: Collect artifacts (always)
