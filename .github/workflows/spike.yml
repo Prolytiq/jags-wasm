@@ -76,6 +76,14 @@ jobs:
           grep -q emscripten /tmp/JAGS-4.3.1/config.sub || { echo "config.sub still does not know emscripten"; exit 1; }
       - name: Patch JAGS for C++17 (std::binary_function/bind2nd removed in C++17)
         run: patch -p1 -d /tmp < "$GITHUB_WORKSPACE/patches/disttab-cxx17.patch"
+      - name: Modernize remaining C++17 removals across src/ (binary_function, bind2nd)
+        run: |
+          find /tmp/JAGS-4.3.1/src -name "*.cc" -o -name "*.h" -o -name "*.cpp" | while read f; do
+            perl -0pi -e 's/using std::binary_function;\n//g' "$f"
+            perl -0pi -e 's/: public binary_function<[^>]*>//g' "$f"
+            perl -pi -e 's/bind2nd\((\w+\(\)), /std::bind($1, std::placeholders::_1, /g' "$f"
+          done
+          grep -rn "binary_function\|bind2nd" /tmp/JAGS-4.3.1/src --include="*.cc" | head -5 || echo "clean"
       - name: Configure JAGS for emscripten
         working-directory: /tmp/JAGS-4.3.1
         run: |
