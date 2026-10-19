@@ -15,6 +15,10 @@ jobs:
         run: |
           which emcc em++ node
           emcc --version | head -1
+          echo "=== fortran compilers anywhere ==="
+          find / -maxdepth 4 \( -iname "*flang*" -o -iname "f77" -o -iname "gfortran*" \) 2>/dev/null | grep -v proc | head -30
+          echo "=== /opt tree ==="
+          ls /opt; ls /opt/webr 2>/dev/null; ls /opt/webr/wasm 2>/dev/null
           which flang-new || true
           # find the wasm R's Makeconf and print its toolchain lines (source of truth)
           MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
