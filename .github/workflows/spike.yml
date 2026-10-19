@@ -12,7 +12,14 @@ jobs:
       image: ghcr.io/r-wasm/webr:main
     steps:
       - name: Toolchain probe
-        run: which emcc em++ node && emcc --version | head -1
+        run: |
+          which emcc em++ node
+          emcc --version | head -1
+          which flang-new || true
+          # find the wasm R's Makeconf and print its toolchain lines (source of truth)
+          MC=$(find / -name Makeconf -path "*R*etc*" 2>/dev/null | head -1)
+          echo "Makeconf: $MC"
+          grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS) *=" "$MC" || true
       - name: Download JAGS source
         run: |
           set -euo pipefail
@@ -35,8 +42,13 @@ jobs:
         working-directory: /tmp/JAGS-4.3.1
         run: |
           set -euo pipefail
-          export CC=emcc CXX=em++ AR=emar RANLIB=emranlib
-          export CFLAGS="-O2 -fexceptions" CXXFLAGS="-O2 -fexceptions"
+          # lift the whole toolchain out of the wasm R Makeconf (CC, CXX, FC, F77, flags, FLIBS)
+          MC=$(find / -name Makeconf -path "*R*etc*" 2>/dev/null | head -1)
+          val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" ; }
+          export CC="$(val CC)" CXX="$(val CXX)" AR="$(val AR)" RANLIB="$(val RANLIB)"
+          export F77="$(val F77)" FC="$(val FC)" FLIBS="$(val FLIBS)"
+          export CFLAGS="$(val CFLAGS)" CXXFLAGS="$(val CXXFLAGS)" FFLAGS="$(val FFLAGS)" FCFLAGS="$(val FCFLAGS)" LDFLAGS="$(val LDFLAGS)"
+          echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
           ./configure --host=wasm32-unknown-emscripten \
             --prefix=/tmp/jags-wasm-install \
             --disable-dependency-tracking \
