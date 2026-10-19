@@ -166,6 +166,10 @@ jobs:
           cd /tmp && tar xzf rjags.tar.gz
           # rjags configure: point at our prefix
           export JAGS_INCLUDE=/tmp/jags-wasm-install/include JAGS_LIB_DIR=/tmp/jags-wasm-install/lib JAGS_MODULES_DIR=/tmp/jags-wasm-install/lib/jags/modules
+          export R_LIBS_USER=/tmp/rjags-lib
+          mkdir -p /tmp/rjags-lib
+          $WR/Rscript -e 'install.packages("coda", repos="https://cran.r-project.org", lib="/tmp/rjags-lib")' 2>&1 | tail -3
+          ls /tmp/rjags-lib
           cd /tmp/rjags
           $WR/R CMD INSTALL . --configure-vars="--with-jags-include=/tmp/jags-wasm-install/include --with-jags-library=/tmp/jags-wasm-install/lib --with-jags-modules=/tmp/jags-wasm-install/lib/jags/modules" 2>&1 | tail -25 || echo "RJAGS BUILD FAILED (expected - iterating)"
       - name: Collect artifacts (always)
