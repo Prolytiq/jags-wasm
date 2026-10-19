@@ -55,7 +55,18 @@ jobs:
           # outside make, emcc would treat them as input files ("$(LTO): No such file")
           val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" | sed 's/\$([^)]*)//g' ; }
           export CC="$(val CC)" CXX="$(val CXX)" AR="$(val AR)" RANLIB="$(val RANLIB)"
+          # the wasm R Makeconf has no F77 (its Fortran comes prebuilt in libFortranRuntime.a);
+          # JAGS must COMPILE Fortran, so point at the container's wasm flang
           export F77="$(val F77)" FC="$(val FC)" FLIBS="$(val FLIBS)"
+          if [ -z "$F77" ]; then
+            FL=$(find /opt/flang -name "flang-new*" -type f 2>/dev/null | head -1)
+            echo "flang binary: $FL"
+            if [ -n "$FL" ]; then
+              export F77="$FL" FC="$FL"
+              export FFLAGS="$(val FFLAGS) -O2 -fwasm-exceptions" FCFLAGS="$(val FCFLAGS) -O2 -fwasm-exceptions"
+            fi
+          fi
+          echo "F77=$F77"
           export CFLAGS="$(val CFLAGS)" CXXFLAGS="$(val CXXFLAGS)" FFLAGS="$(val FFLAGS)" FCFLAGS="$(val FCFLAGS)" LDFLAGS="$(val LDFLAGS)"
           echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
           ./configure --host=wasm32-unknown-emscripten \
