@@ -28,10 +28,9 @@ jobs:
           grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
       - name: Build webr static libs (lapack/blas for wasm)
         run: |
-          ls /opt/webr/libs 2>/dev/null | head -20
-          grep -rE "lapack|blas" /opt/webr/libs/Makefile 2>/dev/null | head -10
-          cd /opt/webr && make -j2 lapack blas 2>&1 | tail -15 || make -j2 libs 2>&1 | tail -25
-          find /opt/webr -name "liblapack*" -o -name "libblas*" 2>/dev/null | head -5
+          ls /opt/webr/libs/recipes 2>/dev/null
+          echo "=== libs Makefile (head) ==="; head -40 /opt/webr/libs/Makefile
+          echo "=== lapack recipe ==="; ls /opt/webr/libs/recipes/lapack 2>/dev/null && head -30 /opt/webr/libs/recipes/lapack/Makefile 2>/dev/null
       - name: Inspect webr flang tooling
         run: |
           echo "=== /opt/flang ==="; ls -la /opt/flang 2>/dev/null || echo absent
