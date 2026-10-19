@@ -24,6 +24,12 @@ jobs:
           MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
           echo "Makeconf: $MC"
           grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
+      - name: Inspect webr flang tooling
+        run: |
+          echo "=== /opt/flang ==="; ls -la /opt/flang 2>/dev/null || echo absent
+          echo "=== fortran-flang.mk ==="; head -60 /opt/webr/tools/fortran-flang.mk 2>/dev/null
+          echo "=== tools dir ==="; ls /opt/webr/tools 2>/dev/null
+          echo "=== Makefile targets ==="; grep -E "^[a-z-]+:" /opt/webr/Makefile | head -20
       - name: Download JAGS source
         run: |
           set -euo pipefail
