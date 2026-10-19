@@ -1,5 +1,5 @@
-# Phase 0 spike (issue fts-app#961 discussion): does JAGS cross-compile to wasm
-# inside the official webR development container?
+# Phase 0/1 spike: JAGS cross-compiles to wasm (Phase 0 DONE — libjags.a + 8 modules);
+# Phase 1 attempts the rjags R package build against the prefix.
 name: jags-wasm-spike
 on:
   push: { branches: [main] }
@@ -153,6 +153,21 @@ jobs:
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" 2>/dev/null | head -3
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \; 2>/dev/null || true
           ls -la $P/lib $P/lib/jags/modules | head -20
+      - name: Phase 1 probe — wasm R + rjags build attempt
+        run: |
+          set -euo pipefail
+          echo "=== wasm R locations ==="
+          ls /opt/webr/wasm/R-4.6.0/bin 2>/dev/null | head
+          ls /opt/R 2>/dev/null
+          WR=$(ls -d /opt/webr/wasm/R-*/bin 2>/dev/null | head -1)
+          echo "wasm R bin: $WR"
+          curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/rjags_4-16.tar.gz" || \
+            curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/Archive/rjags/rjags_4-16.tar.gz"
+          cd /tmp && tar xzf rjags.tar.gz
+          # rjags configure: point at our prefix
+          export JAGS_INCLUDE=/tmp/jags-wasm-install/include JAGS_LIB_DIR=/tmp/jags-wasm-install/lib JAGS_MODULES_DIR=/tmp/jags-wasm-install/lib/jags/modules
+          cd /tmp/rjags
+          $WR/R CMD INSTALL . --configure-vars="--with-jags-include=/tmp/jags-wasm-install/include --with-jags-library=/tmp/jags-wasm-install/lib --with-jags-modules=/tmp/jags-wasm-install/lib/jags/modules" 2>&1 | tail -25 || echo "RJAGS BUILD FAILED (expected - iterating)"
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
