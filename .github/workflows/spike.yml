@@ -23,6 +23,9 @@ jobs:
           # find the wasm R's Makeconf and print its toolchain lines (source of truth)
           MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
           echo "Makeconf: $MC"
+          echo "=== wasm R libs (blas/lapack candidates) ==="
+          ls /opt/webr/wasm/lib 2>/dev/null | head -20
+          ls /opt/webr/wasm/R-4.6.0/lib/R/lib 2>/dev/null | head -20
           grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
       - name: Inspect webr flang tooling
         run: |
@@ -81,10 +84,14 @@ jobs:
           echo "F77=$F77"
           export CFLAGS="$(val CFLAGS)" CXXFLAGS="$(val CXXFLAGS)" FFLAGS="$(val FFLAGS)" FCFLAGS="$(val FCFLAGS)" LDFLAGS="$(val LDFLAGS)"
           echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
+          # JAGS hard-requires BLAS+LAPACK; use the wasm R's own copies
+          export LIBS="-L/opt/webr/wasm/lib -lRlapack -lRblas $FLIBS"
+          ls -la /opt/webr/wasm/lib/libR* 2>/dev/null || true
           ./configure --host=wasm32-unknown-emscripten \
             --prefix=/tmp/jags-wasm-install \
             --disable-dependency-tracking \
-            --without-blas --without-lapack \
+            --with-blas="-L/opt/webr/wasm/lib -lRblas" \
+            --with-lapack="-L/opt/webr/wasm/lib -lRlapack" \
             2>&1 | tee configure.log
       - name: Build
         working-directory: /tmp/JAGS-4.3.1
