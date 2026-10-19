@@ -153,33 +153,19 @@ jobs:
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" 2>/dev/null | head -3
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \; 2>/dev/null || true
           ls -la $P/lib $P/lib/jags/modules | head -20
-      - name: Phase 1 probe — wasm R + rjags build attempt
+      - name: Phase 1 — build rjags against the wasm libjags (rwasm::build, static Makevars)
         run: |
           set -euo pipefail
-          echo "=== wasm R locations ==="
-          ls /opt/webr/wasm/R-4.6.0/bin 2>/dev/null | head
-          ls /opt/R 2>/dev/null
-          WR=$(ls -d /opt/webr/wasm/R-*/bin 2>/dev/null | head -1)
-          echo "wasm R bin: $WR"
-          curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/rjags_4-16.tar.gz" || \
-            curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/Archive/rjags/rjags_4-16.tar.gz"
-          cd /tmp && tar xzf rjags.tar.gz
-          # rjags configure: point at our prefix
-          export JAGS_INCLUDE=/tmp/jags-wasm-install/include JAGS_LIB_DIR=/tmp/jags-wasm-install/lib JAGS_MODULES_DIR=/tmp/jags-wasm-install/lib/jags/modules
-          export R_LIBS_USER=/tmp/rjags-lib
-          mkdir -p /tmp/rjags-lib
-          $WR/Rscript -e 'install.packages("coda", repos="https://cran.r-project.org", lib="/tmp/rjags-lib")' 2>&1 | tail -3
-          ls /tmp/rjags-lib
+          # host R drives the wasm build via rwasm (same machinery build-rwasm uses)
+          Rscript -e 'install.packages("rwasm", repos=c("https://r-wasm.r-universe.dev","https://cran.r-project.org"))' 2>&1 | tail -2
+          # modified rjags tarball: configure removed, static Makevars pointing at our prefix
           cd /tmp/rjags
-          $WR/R CMD INSTALL . --configure-vars="--with-jags-include=/tmp/jags-wasm-install/include --with-jags-library=/tmp/jags-wasm-install/lib --with-jags-modules=/tmp/jags-wasm-install/lib/jags/modules" 2>&1 | tail -25 || echo "RJAGS BUILD FAILED (expected - iterating)"
+          rm -f src/configure src/configure.ac src/configure.in
+          cat > src/Makevars <<'MKV'
+          PKG_CPPFLAGS = -I/tmp/jags-wasm-install/include
+          PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc -L/tmp/lapack-wasm/lib -llapack -L/tmp/BLAS-3.12.0 -lblas /opt/flang/wasm/lib/libFortranRuntime.a
+          MKV
+          cd /tmp && tar czf rjags-mod.tar.gz rjags
+          Rscript -e 'rwasm::build("file:///tmp/rjags-mod.tar.gz", out_dir = "/tmp/rjags-out")' 2>&1 | tail -25
+          ls -la /tmp/rjags-out
       - name: Collect artifacts (always)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jags-wasm-spike-logs
-          path: |
-            /tmp/JAGS-4.3.1/config.log
-            /tmp/JAGS-4.3.1/configure.log
-            /tmp/JAGS-4.3.1/build.log
-            /tmp/jags-wasm-install/
-          if-no-files-found: ignore
