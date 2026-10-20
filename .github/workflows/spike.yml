@@ -286,8 +286,9 @@ jobs:
       - name: Add JAGS module side modules to the repo
         run: |
           set -euo pipefail
-          mkdir -p _site/modules
-          find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
+          sudo mkdir -p _site/modules
+          sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
+          sudo chown -R $(id -u):$(id -g) _site
           ls _site/modules | head -10
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
