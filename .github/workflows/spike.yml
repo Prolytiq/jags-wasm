@@ -195,7 +195,7 @@ jobs:
             try { const o = await webR.evalRVoid(code); return 'ok'; }
             catch (e) { return 'ERR: ' + String(e).slice(0, 300); }
           };
-          console.log('untar:', await run('untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib")'));
+          console.log('untar:', await run('untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal")'));
           console.log('libpath:', await run('.libPaths(c("/tmp/rjags-lib", .libPaths()))'));
           console.log('load rjags:', await run('suppressWarnings(library(rjags))'));
           console.log('set.module:', await run('rjags:::set.modules("/tmp")'));
