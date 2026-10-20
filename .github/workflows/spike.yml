@@ -297,12 +297,3 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
-  deploy-pages:
-    needs: deploy-wasm-repo
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
