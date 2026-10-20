@@ -176,13 +176,10 @@ jobs:
           PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
           MKV
           cd /tmp && tar czf rjags-mod.tar.gz rjags
-          # rwasm::build compiles fine but its final copy expects a wasm-named tarball;
-          # tolerate the packaging error and grab the built .so from the source tree
-          Rscript -e 'tryCatch(rwasm::build("/tmp/rjags", out_dir = "/tmp/rjags-out"), error=function(e) message("packaging error (expected): ", conditionMessage(e)))' 2>&1 | tail -12
-          mkdir -p /tmp/rjags-out
-          find /tmp/rjags/src /tmp/Rtmp* -maxdepth 4 -name "rjags.so" -exec cp {} /tmp/rjags-out/ \; 2>/dev/null || true
-          ls -la /tmp/rjags-out/
-          file /tmp/rjags-out/rjags.so 2>/dev/null || true
+          # own driver: same cross-compilation env as rwasm, but tolerant to the
+          # tarball name and capturing the .so directly (see patches/rjags-build.R)
+          Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -25
+          file /tmp/rjags-out/* 2>/dev/null || true
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
