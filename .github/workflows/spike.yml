@@ -263,16 +263,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build gemtc (pure R, against the wasm rjags built above)
+      - name: Download JAGS stack artifacts (separate job containers!)
+        uses: actions/download-artifact@v4
+        with:
+          name: jags-wasm-artifacts
+          path: /tmp/stack
+      - name: Build gemtc (pure R — binary tarball needs no wasm toolchain)
         run: |
           set -euo pipefail
+          HR=$(ls -d /opt/webr/host/R-*/bin | head -1)
           curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.0-3.tar.gz" || \
             curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.0-3.tar.gz"
           cd /tmp && tar xzf gemtc.tar.gz
-          # gemtc needs rjags at check-time only; source install suffices for the binary
-          Rscript -e 'rwasm::build("/tmp/gemtc", out_dir = "/tmp/gemtc-out")' 2>&1 | tail -8 || \
-            echo "gemtc build failed — ship rjags first, iterate"
-          ls /tmp/gemtc-out 2>/dev/null || true
+          # stub dependencies for the install-time check (gemtc is pure R; the real
+          # wasm rjags loads in the browser, not here)
+          mkdir -p /tmp/stub/rjags /tmp/stub/coda
+          printf 'Package: rjags\nVersion: 4-16\n' > /tmp/stub/rjags/DESCRIPTION
+          printf 'Package: coda\nVersion: 0.19-4.1\n' > /tmp/stub/coda/DESCRIPTION
+          export R_LIBS_USER=/tmp/stub
+          $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -5
+          mkdir -p /tmp/gemtc-out && find /tmp -maxdepth 1 -name "gemtc*.tgz" -exec cp {} /tmp/gemtc-out/ \;
       - name: Assemble CRAN-like wasm repo
         run: |
           set -euo pipefail
