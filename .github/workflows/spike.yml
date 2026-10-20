@@ -189,7 +189,8 @@ jobs:
           import { readFileSync } from 'fs';
           const webR = new WebR();
           await webR.init();
-          await webR.FS.writeFile('/tmp/rjags.so', readFileSync('/tmp/rjags-out/rjags.so'));
+          const tar = readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz');
+          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', tar);
           const run = async (label, code) => {
             try { await webR.evalRVoid(code); console.log(label + ': ok'); }
             catch (e) { console.log(label + ': ERR ' + String(e).slice(0, 400)); }
@@ -199,8 +200,7 @@ jobs:
             catch (e) { console.log(label + ': ERR ' + String(e).slice(0, 400)); }
           };
           await run('install coda', 'webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE)');
-          await run('copy so', 'dir.create("/tmp/rjags-lib/rjags/libs", recursive=TRUE); file.copy("/tmp/rjags.so", "/tmp/rjags-lib/rjags/libs/rjags.so")');
-          await run('inject desc', 'd <- "/tmp/rjags-lib/rjags/DESCRIPTION"; writeLines(c("Package: rjags", "Version: 4-16", "Depends: R (>= 3.6.0), coda", "Built: R 4.6.0; x86_64-pc-linux-gnu; 2026-10-20 00:00:00 UTC; unix"), d)');
+          await run('untar rjags binary', 'untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal")');
           await run('libpath', '.libPaths(c("/tmp/rjags-lib", .libPaths()))');
           await ev('coda ns', 'requireNamespace("coda", quietly=TRUE)');
           await run('load rjags', 'suppressWarnings(library(rjags))');
