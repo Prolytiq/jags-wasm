@@ -37,3 +37,18 @@ update(m, 100) + jags.samples  → y mean: -0.0043, sd: 1.03  (correct for dnorm
 - Platform wiring: /biostatistics downloads the module .so files into the VFS
   module dir before `library(rjags)` (same auto-install hook as #965).
 - NMA bayesiana then runs in-browser; netmeta (frequencista) remains shipped.
+
+## Phase 2 progress (2026-10-20, later)
+
+- **Module side modules DEPLOYED**: https://prolytiq.github.io/jags-wasm/modules/
+  (libbasemod.so, libbugs.so, libdic.so, libglm.so, liblecuyer.so, libmix.so,
+  libmsm.so — all HTTP 200).
+- **gemtc 1.1-2 wasm binary BUILT and deployed** via the official
+  `r-wasm/actions/build-rwasm` (pkgdepends local ref, PACKAGES index generated).
+- **Remaining**: rjags binary itself is not in the Pages repo yet — the
+  build-rwasm container has no libjags prefix. Fix (next session): bake the
+  JAGS prefix into a custom builder image (FROM ghcr.io/r-wasm/webr:main,
+  RUN the build steps, push to GHCR) and pass it as `webr-image:` to
+  build-rwasm. Then the platform session adds this Pages URL as a third
+  package repo + downloads module .so files into the VFS before
+  `library(rjags)`.
