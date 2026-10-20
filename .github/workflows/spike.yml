@@ -157,8 +157,10 @@ jobs:
           # libltdl searches the module dir for <name>.so at runtime
           for a in src/modules/*/.libs/lib*.a; do
             n=$(basename $a .a)
+            # embed BLAS/LAPACK INSIDE each module: importing dtrmm_/dgemm_ from R's
+            # libRblas fails on ABI (signature mismatch); internal copies bind statically
             em++ -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz \
-              -Wl,--whole-archive "$a" -Wl,--no-whole-archive \
+              -Wl,--whole-archive "$a" /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a /opt/flang/wasm/lib/libFortranRuntime.a -Wl,--no-whole-archive \
               -o "$P/lib/jags/modules/${n}.so" 2>&1 | tail -2 || echo "side module $n FAILED"
           done
           ls -la $P/lib/jags/modules/ | head -25
