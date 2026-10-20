@@ -271,11 +271,13 @@ jobs:
           set -euo pipefail
           curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz" || \
             curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.1-2.tar.gz"
+      - name: Locate rjags tarball
+        run: find /tmp/stack -name "rjags*tar.gz" | head -3
       - name: Build rjags + gemtc wasm binaries (official rwasm pipeline)
         uses: r-wasm/actions/build-rwasm@v3
         with:
           packages: |
-            local::/tmp/stack/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz
+            file:///tmp/stack/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz
             gemtc
           repo-path: _site
       - name: Add JAGS module side modules to the repo
