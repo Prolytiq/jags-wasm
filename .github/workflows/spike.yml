@@ -189,27 +189,24 @@ jobs:
           import { readFileSync } from 'fs';
           const webR = new WebR();
           await webR.init();
-          const tar = readFileSync('/tmp/rjags-out/rjags.so');
-          await webR.FS.writeFile('/tmp/rjags.so', tar);
-          const sh = await webR.evalR('new.env()');
-          const run = async (code) => {
-            try { const o = await webR.evalRVoid(code); return 'ok'; }
-            catch (e) { return 'ERR: ' + String(e).slice(0, 300); }
+          await webR.FS.writeFile('/tmp/rjags.so', readFileSync('/tmp/rjags-out/rjags.so'));
+          const run = async (label, code) => {
+            try { await webR.evalRVoid(code); console.log(label + ': ok'); }
+            catch (e) { console.log(label + ': ERR ' + String(e).slice(0, 400)); }
           };
-          console.log('install coda:', await run('webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE)'));
-          console.log('install rjags so:', await run('dir.create("/tmp/rjags-lib/rjags/libs", recursive=TRUE); file.copy("/tmp/rjags.so", "/tmp/rjags-lib/rjags/libs/rjags.so")'));
-          console.log('inject DESCRIPTIONs:', await run(`
-for (p in c("rjags")) {
-  d <- file.path("/tmp/rjags-lib", p, "DESCRIPTION")
-  if (!file.exists(d)) {
-    # binary package skeleton: minimal DESCRIPTION with Built so R accepts it
-    writeLines(c("Package: rjags", "Version: 4-16", "Depends: R (>= 3.6.0), coda", "Built: R 4.6.0; x86_64-pc-linux-gnu; 2026-10-20 00:00:00 UTC; unix"), d)
-  }
-}`));
-          console.log('libpath:', await run('.libPaths(c("/tmp/rjags-lib", .libPaths()))'));
-          console.log('load rjags:', await run('suppressWarnings(library(rjags))'));
-          console.log('load.module base:', await run('rjags::load.module("base")'));
-          console.log('simple model:', await run('m <- jags.model(textConnection("model { y ~ dnorm(0,1) }"), data=list(), n.chains=1)'));
+          const ev = async (label, code) => {
+            try { const r = await webR.evalR(code); console.log(label + ':', String(await r.toJs()).slice(0, 200)); }
+            catch (e) { console.log(label + ': ERR ' + String(e).slice(0, 400)); }
+          };
+          await run('install coda', 'webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE)');
+          await run('copy so', 'dir.create("/tmp/rjags-lib/rjags/libs", recursive=TRUE); file.copy("/tmp/rjags.so", "/tmp/rjags-lib/rjags/libs/rjags.so")');
+          await run('inject desc', 'd <- "/tmp/rjags-lib/rjags/DESCRIPTION"; writeLines(c("Package: rjags", "Version: 4-16", "Depends: R (>= 3.6.0), coda", "Built: R 4.6.0; x86_64-pc-linux-gnu; 2026-10-20 00:00:00 UTC; unix"), d)');
+          await run('libpath', '.libPaths(c("/tmp/rjags-lib", .libPaths()))');
+          await ev('coda ns', 'requireNamespace("coda", quietly=TRUE)');
+          await run('load rjags', 'suppressWarnings(library(rjags))');
+          await run('load.module base', 'rjags::load.module("base")');
+          await run('jags.model', 'm <- rjags::jags.model(textConnection("model { y ~ dnorm(0,1) }"), data = list(), n.chains = 1)');
+          await run('mcmc', 'rjags::update(m, 100); p <- rjags::jags.samples(m, c("y"), 500); cat("y mean:", mean(p$y))');
           process.exit(0);
           SMK
           cd /tmp && npm init -y >/dev/null 2>&1; npm install webr@0.6.0 >/dev/null 2>&1
