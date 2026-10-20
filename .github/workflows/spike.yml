@@ -180,6 +180,32 @@ jobs:
           # tarball name and capturing the .so directly (see patches/rjags-build.R)
           Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -25
           file /tmp/rjags-out/* 2>/dev/null || true
+      - name: Phase 1 smoke test — library(rjags) inside WebR (Node)
+        run: |
+          set -euo pipefail
+          cat > /tmp/smoke.mjs <<'SMK'
+          import { WebR } from 'webr';
+          import { readFileSync } from 'fs';
+          const webR = new WebR();
+          await webR.init();
+          const tar = readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz');
+          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', tar);
+          const sh = await webR.evalR('new.env()');
+          const run = async (code) => {
+            try { const o = await webR.evalRVoid(code); return 'ok'; }
+            catch (e) { return 'ERR: ' + String(e).slice(0, 300); }
+          };
+          console.log('untar:', await run('untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib")'));
+          console.log('libpath:', await run('.libPaths(c("/tmp/rjags-lib", .libPaths()))'));
+          console.log('load rjags:', await run('suppressWarnings(library(rjags))'));
+          console.log('set.module:', await run('rjags:::set.modules("/tmp")'));
+          console.log('load.module base:', await run('rjags::load.module("base")'));
+          console.log('simple model:', await run('m <- jags.model(textConnection("model { y ~ dnorm(0,1) }"), data=list(), n.chains=1)'));
+          process.exit(0);
+          SMK
+          cd ~/fts-app-webr-pkgs 2>/dev/null || cd /tmp
+          node --experimental-default-type=module /tmp/smoke.mjs 2>&1 | tail -12 || true
+          cd /tmp && NODE_PATH=/tmp node /tmp/smoke.mjs 2>&1 | tail -14 || true
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
