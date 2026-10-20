@@ -258,51 +258,45 @@ jobs:
   deploy-wasm-repo:
     needs: build-libjags
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/r-wasm/webr:main
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Download JAGS stack artifacts (separate job containers!)
+      - name: Download JAGS stack artifacts
         uses: actions/download-artifact@v4
         with:
           name: jags-wasm-artifacts
           path: /tmp/stack
-      - name: Build gemtc (pure R — binary tarball needs no wasm toolchain)
+      - name: Download gemtc source
         run: |
           set -euo pipefail
-          HR=$(ls -d /opt/webr/host/R-*/bin | head -1)
           curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz" || \
             curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.1-2.tar.gz"
-          cd /tmp && tar xzf gemtc.tar.gz
-          # stub dependencies for the install-time check (gemtc is pure R; the real
-          # wasm rjags loads in the browser, not here)
-          mkdir -p /tmp/stub/rjags /tmp/stub/coda
-          for d in "rjags 4-16" "igraph 2.1.4" "meta 8.5-0" "plyr 1.8.9" "Rglpk 0.6-5.4" "forcats 1.0.1"; do
-            set -- $d
-            mkdir -p /tmp/stub/$1
-            printf "Package: $1\nVersion: $2\n" > /tmp/stub/$1/DESCRIPTION
-          done
-          # coda must REALLY load (lazy-loading executes it): install real coda+lattice
-          $HR/Rscript -e 'install.packages(c("lattice","coda"), lib="/tmp/stub", repos="https://cran.r-project.org", quiet=TRUE)' 2>&1 | tail -2
-          export R_LIBS_USER=/tmp/stub
-          $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html --no-lazy --no-byte-compile gemtc 2>&1 | tail -5
-          mkdir -p /tmp/gemtc-out && find /tmp -maxdepth 1 -name "gemtc*.tgz" -exec cp {} /tmp/gemtc-out/ \;
-      - name: Assemble CRAN-like wasm repo
+      - name: Build rjags + gemtc wasm binaries (official rwasm pipeline)
+        uses: r-wasm/actions/build-rwasm@v3
+        with:
+          packages: |
+            local::/tmp/stack/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz
+            gemtc
+          repo-path: _site
+      - name: Add JAGS module side modules to the repo
         run: |
           set -euo pipefail
-          mkdir -p /tmp/repo/src/contrib /tmp/repo/modules
-          T=$(find /tmp/rjags-out -name "rjags*.tar.gz" | head -1)
-          cp "$T" /tmp/repo/src/contrib/
-          G=$(find /tmp/gemtc-out -name "gemtc*.tar.gz" 2>/dev/null | head -1)
-          [ -n "$G" ] && cp "$G" /tmp/repo/src/contrib/
-          cp /tmp/jags-wasm-install/lib/jags/modules/*.so /tmp/repo/modules/
-          Rscript -e 'tools::write_PACKAGES("/tmp/repo/src/contrib", type = "source")'
-          echo "repo contents:"; find /tmp/repo -type f | head -20
+          mkdir -p _site/modules
+          find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
+          ls _site/modules | head -10
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/repo
+          path: _site
+  deploy-pages:
+    needs: deploy-wasm-repo
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
   deploy-pages:
     needs: deploy-wasm-repo
     runs-on: ubuntu-latest
