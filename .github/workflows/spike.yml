@@ -173,7 +173,9 @@ jobs:
           PKG_CPPFLAGS = -I/tmp/jags-wasm-install/include
                     # No -llapack/-lblas: R already links libRlapack/libRblas into the process and
           # the rjags.so side module binds LAPACK/BLAS symbols against them at load time.
-          PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
+          # --whole-archive: import-dynamic would otherwise turn libjags's unresolved
+          # symbols into dynamic imports and skip pulling archive members entirely.
+          PKG_LIBS = -Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive -L/tmp/jags-wasm-install/lib -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
           LDFLAGS = -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz
           MKV
           cd /tmp && tar czf rjags-mod.tar.gz rjags
