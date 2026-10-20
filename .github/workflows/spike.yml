@@ -288,12 +288,12 @@ jobs:
           set -euo pipefail
           sudo mkdir -p _site/modules _site/src/contrib
           sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
-          sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz _site/src/contrib/
+          sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz _site/src/contrib/rjags_4-16.tar.gz
           sudo chown -R $(id -u):$(id -g) _site
           # append the rjags index stanza (no R on the runner; the fields mirror
           # the tarball's DESCRIPTION — webr::install reads Package/Version/Depends)
-          MD5=$(md5sum _site/src/contrib/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz | cut -d" " -f1)
-          MD5=$(md5sum _site/src/contrib/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz | cut -d" " -f1)
+          MD5=$(md5sum _site/src/contrib/rjags_4-16.tar.gz | cut -d" " -f1)
+          MD5=$(md5sum _site/src/contrib/rjags_4-16.tar.gz | cut -d" " -f1)
           { printf "\nPackage: rjags\nVersion: 4-16\nDepends: R (>= 3.6.0), coda (>= 0.19-1)\nLicense: GPL-2\nMD5sum: %s\nNeedsCompilation: yes\n" "$MD5"; } >> _site/src/contrib/PACKAGES
           ls _site/modules | head -10
           grep -E "^Package:" _site/src/contrib/PACKAGES
