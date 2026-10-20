@@ -287,21 +287,45 @@ jobs:
             local::pkgs/rjags_4-16.tar.gz
             gemtc
           repo-path: _site
-      - name: Add JAGS module side modules + rjags binary to the repo
+      - name: Assemble the webr binary repo (bin/emscripten/contrib/4.6) + modules
         run: |
           set -euo pipefail
-          sudo mkdir -p _site/modules _site/src/contrib
-          sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
-          sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz _site/src/contrib/rjags_4-16.tar.gz
+          V=_site/bin/emscripten/contrib/4.6
+          sudo mkdir -p $V _site/modules
+          # installed-tree tarballs, .tgz (webr's install_tgz format)
+          sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz $V/rjags_4-16.tgz
+          sudo cp _site/src/contrib/gemtc_1.1-2.tar.gz $V/gemtc_1.1-2.tgz
           sudo chown -R $(id -u):$(id -g) _site
-          # append the rjags index stanza (no R on the runner; the fields mirror
-          # the tarball's DESCRIPTION — webr::install reads Package/Version/Depends)
-          MD5=$(md5sum _site/src/contrib/rjags_4-16.tar.gz | cut -d" " -f1)
-          MD5=$(md5sum _site/src/contrib/rjags_4-16.tar.gz | cut -d" " -f1)
-          { printf "\nPackage: rjags\nVersion: 4-16\nDepends: R (>= 3.6.0), coda (>= 0.19-1)\nLicense: GPL-2\nMD5sum: %s\nNeedsCompilation: yes\n" "$MD5"; } >> _site/src/contrib/PACKAGES
-          gzip -kf _site/src/contrib/PACKAGES
-          ls _site/modules | head -10
-          grep -E "^Package:" _site/src/contrib/PACKAGES
+          RJ_MD5=$(md5sum $V/rjags_4-16.tgz | cut -d" " -f1)
+          GM_MD5=$(md5sum $V/gemtc_1.1-2.tgz | cut -d" " -f1)
+          REPO=https://prolytiq.github.io/jags-wasm/bin/emscripten/contrib/4.6
+          cat > $V/PACKAGES <<IDX
+          Package: rjags
+          Version: 4-16
+          Depends: R (>= 3.6.0), coda (>= 0.19-1)
+          License: GPL-2
+          MD5sum: $RJ_MD5
+          Built: R 4.6.0; ; 2026-10-20 00:00:00 UTC; unix
+          File: rjags_4-16.tgz
+          Repository: $REPO
+
+          Package: gemtc
+          Version: 1.1-2
+          Depends: R (>= 3.5.0), coda (>= 0.13)
+          Imports: igraph (>= 1.5), meta (>= 2.1), plyr (>= 1.8), grDevices, graphics, stats, utils, grid, rjags (>= 4-0), Rglpk, forcats (>= 0.5.0)
+          Suggests: testthat (>= 0.8), Matrix
+          License: GPL-3
+          MD5sum: $GM_MD5
+          Built: R 4.6.0; ; 2026-10-20 00:00:00 UTC; unix
+          File: gemtc_1.1-2.tgz
+          Repository: $REPO
+          IDX
+          # de-indent the heredoc body (YAML block scalar strips nothing)
+          sed -i 's/^          //' $V/PACKAGES
+          gzip -kf $V/PACKAGES
+          sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
+          ls $V _site/modules | head -14
+          grep -E "^Package:" $V/PACKAGES
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
