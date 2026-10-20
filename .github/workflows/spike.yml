@@ -5,6 +5,11 @@ on:
   push: { branches: [main] }
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 jobs:
   build-libjags:
     runs-on: ubuntu-latest
@@ -249,3 +254,46 @@ jobs:
             /tmp/jags-wasm-install/
             /tmp/rjags-out/
           if-no-files-found: ignore
+
+  deploy-wasm-repo:
+    needs: build-libjags
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/r-wasm/webr:main
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build gemtc (pure R, against the wasm rjags built above)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.0-3.tar.gz" || \
+            curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.0-3.tar.gz"
+          cd /tmp && tar xzf gemtc.tar.gz
+          # gemtc needs rjags at check-time only; source install suffices for the binary
+          Rscript -e 'rwasm::build("/tmp/gemtc", out_dir = "/tmp/gemtc-out")' 2>&1 | tail -8 || \
+            echo "gemtc build failed — ship rjags first, iterate"
+          ls /tmp/gemtc-out 2>/dev/null || true
+      - name: Assemble CRAN-like wasm repo
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/repo/src/contrib /tmp/repo/modules
+          T=$(find /tmp/rjags-out -name "rjags*.tar.gz" | head -1)
+          cp "$T" /tmp/repo/src/contrib/
+          G=$(find /tmp/gemtc-out -name "gemtc*.tar.gz" 2>/dev/null | head -1)
+          [ -n "$G" ] && cp "$G" /tmp/repo/src/contrib/
+          cp /tmp/jags-wasm-install/lib/jags/modules/*.so /tmp/repo/modules/
+          Rscript -e 'tools::write_PACKAGES("/tmp/repo/src/contrib", type = "source")'
+          echo "repo contents:"; find /tmp/repo -type f | head -20
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/repo
+  deploy-pages:
+    needs: deploy-wasm-repo
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
