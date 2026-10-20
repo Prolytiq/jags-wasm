@@ -272,8 +272,8 @@ jobs:
         run: |
           set -euo pipefail
           HR=$(ls -d /opt/webr/host/R-*/bin | head -1)
-          curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.0-3.tar.gz" || \
-            curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.0-3.tar.gz"
+          curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz" || \
+            curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.1-2.tar.gz"
           cd /tmp && tar xzf gemtc.tar.gz
           # stub dependencies for the install-time check (gemtc is pure R; the real
           # wasm rjags loads in the browser, not here)
