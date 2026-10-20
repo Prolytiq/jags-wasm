@@ -203,6 +203,8 @@ jobs:
           await run('untar rjags binary', 'untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal")');
           await run('libpath', '.libPaths(c("/tmp/rjags-lib", .libPaths()))');
           await ev('coda ns', 'requireNamespace("coda", quietly=TRUE)');
+          await ev('libs tree', 'list.files("/tmp/rjags-lib/rjags/libs", recursive=TRUE)');
+          await ev('dyn.load direct', 'd <- dyn.load("/tmp/rjags-lib/rjags/libs/rjags.so"); paste("loaded:", d[["path"]])');
           await run('load rjags', 'suppressWarnings(library(rjags))');
           await run('load.module base', 'rjags::load.module("base")');
           await run('jags.model', 'm <- rjags::jags.model(textConnection("model { y ~ dnorm(0,1) }"), data = list(), n.chains = 1)');
