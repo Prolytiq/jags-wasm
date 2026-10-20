@@ -203,9 +203,8 @@ jobs:
           console.log('simple model:', await run('m <- jags.model(textConnection("model { y ~ dnorm(0,1) }"), data=list(), n.chains=1)'));
           process.exit(0);
           SMK
-          cd ~/fts-app-webr-pkgs 2>/dev/null || cd /tmp
-          node --experimental-default-type=module /tmp/smoke.mjs 2>&1 | tail -12 || true
-          cd /tmp && NODE_PATH=/tmp node /tmp/smoke.mjs 2>&1 | tail -14 || true
+          cd /tmp && npm init -y >/dev/null 2>&1; npm install webr@0.6.0 >/dev/null 2>&1
+          node /tmp/smoke.mjs 2>&1 | tail -14 || true
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
