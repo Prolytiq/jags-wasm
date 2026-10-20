@@ -15,7 +15,16 @@ stopifnot(dir.exists(pkg_dir))
 
 webr_root <- "/opt/webr"
 webr_version <- "4.6.0"
-webr_vars <- system.file("webr-vars.mk", package = "rwasm")
+# merged user makevars: webr-vars.mk + overrides (user makevars is applied
+# LAST, so a plain src/Makevars override of C_VISIBILITY never wins)
+combined <- tempfile(fileext = ".mk")
+cat(readLines(system.file("webr-vars.mk", package = "rwasm")),
+    "",
+    "# rjags-wasm overrides — keep R_init_rjags exportable",
+    "C_VISIBILITY =",
+    "CXX_VISIBILITY =",
+    file = combined, sep = "\n")
+webr_vars <- combined
 webr_profile <- system.file("webr-profile", package = "rwasm")
 sys_bin <- system.file("bin", package = "rwasm")
 
