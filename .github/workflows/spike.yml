@@ -189,7 +189,7 @@ jobs:
           import { readFileSync } from 'fs';
           const webR = new WebR();
           await webR.init();
-          const shelter = await webR.createShelter();
+          const shelter = await new webR.Shelter();
           await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz'));
           const out = (kind, text) => { const t = String(text).slice(0, 1500); if (t.trim()) console.log(kind + ': ' + t); };
           const run = async (label, code) => {
