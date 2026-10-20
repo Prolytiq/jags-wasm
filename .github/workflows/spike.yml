@@ -286,7 +286,7 @@ jobs:
           # coda must REALLY load (lazy-loading executes it): install real coda+lattice
           $HR/Rscript -e 'install.packages(c("lattice","coda"), lib="/tmp/stub", repos="https://cran.r-project.org", quiet=TRUE)' 2>&1 | tail -2
           export R_LIBS_USER=/tmp/stub
-          $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -5
+          $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html --no-lazy --no-byte-compile gemtc 2>&1 | tail -5
           mkdir -p /tmp/gemtc-out && find /tmp -maxdepth 1 -name "gemtc*.tgz" -exec cp {} /tmp/gemtc-out/ \;
       - name: Assemble CRAN-like wasm repo
         run: |
