@@ -33,6 +33,10 @@ webr_env <- c(
   sprintf("EM_PKG_CONFIG_PATH=%s/wasm/lib/pkgconfig", webr_root)
 )
 
+# dependency check inside CMD INSTALL resolves against lib_dir: put coda there
+install.packages("coda", lib = lib_dir, repos = "https://cran.r-project.org",
+                 quiet = TRUE)
+
 status <- withr::with_dir(
   tmp_dir,
   system2(
