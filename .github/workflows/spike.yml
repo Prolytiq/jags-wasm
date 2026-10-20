@@ -290,8 +290,18 @@ jobs:
           sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
           sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz _site/src/contrib/
           sudo chown -R $(id -u):$(id -g) _site
-          # regenerate the PACKAGES index including rjags (binary tarball fields)
-          Rscript -e 'tools::write_PACKAGES("_site/src/contrib", type = "source")'
+          # append the rjags index stanza (no R on the runner; the fields mirror
+          # the tarball's DESCRIPTION — webr::install reads Package/Version/Depends)
+          MD5=$(md5sum _site/src/contrib/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz | cut -d" " -f1)
+          cat >> _site/src/contrib/PACKAGES <<'IDX'
+
+Package: rjags
+Version: 4-16
+Depends: R (>= 3.6.0), coda (>= 0.19-1)
+License: GPL-2
+MD5sum: $MD5
+NeedsCompilation: yes
+IDX
           ls _site/modules | head -10
           grep -E "^Package:" _site/src/contrib/PACKAGES
       - name: Upload Pages artifact
