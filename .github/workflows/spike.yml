@@ -189,32 +189,25 @@ jobs:
           import { readFileSync } from 'fs';
           const webR = new WebR();
           await webR.init();
-          const tar = readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz');
-          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', tar);
+          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz'));
+          const out = (kind, text) => { const t = String(text).slice(0, 1500); if (t.trim()) console.log(kind + ': ' + t); };
           const run = async (label, code) => {
-            try { await webR.evalRVoid(code); console.log(label + ': ok'); }
-            catch (e) { console.log(label + ': ERR ' + String(e).slice(0, 2000)); }
+            const o = await webR.captureR(code, { captureConditions: true, captureStreams: true, captureMessage: true });
+            for (const e of o.output) out(label + ' [' + e.type + ']', typeof e.data === 'string' ? e.data : '');
+            if (o.error) out(label + ' [ERROR]', '');
+            console.log(label + ' => done');
           };
-          const ev = async (label, code) => {
-            try { const r = await webR.evalR(code); console.log(label + ':', String(await r.toJs()).slice(0, 200)); }
-            catch (e) { console.log(label + ': ERR ' + String(e).slice(0, 2000)); }
-          };
-          await run('install coda', 'webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE)');
-          await run('untar rjags binary', 'untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal")');
-          await run('libpath', '.libPaths(c("/tmp/rjags-lib", .libPaths()))');
-          await ev('coda ns', 'requireNamespace("coda", quietly=TRUE)');
-          await ev('libs tree', 'toString(list.files("/tmp/rjags-lib/rjags/libs", recursive=TRUE))');
-          await ev('so size', 'file.info("/tmp/rjags-lib/rjags/libs/rjags.so")$size');
-          await ev('Makeconf LDFLAGS', 'Makeconf <- readLines("/opt/webr/wasm/R-4.6.0/lib/R/etc/Makeconf"); paste(grep("^LDFLAGS|^SHLIB_LDFLAGS|^C_VISIBILITY", Makeconf, value=TRUE), collapse=" || ")');
-          await ev('dyn.load direct', 'd <- dyn.load("/tmp/rjags-lib/rjags/libs/rjags.so"); paste("loaded:", d[["path"]])');
-          await run('load rjags', 'suppressWarnings(library(rjags))');
-          await run('load.module base', 'rjags::load.module("base")');
-          await run('jags.model', 'm <- rjags::jags.model(textConnection("model { y ~ dnorm(0,1) }"), data = list(), n.chains = 1)');
-          await run('mcmc', 'rjags::update(m, 100); p <- rjags::jags.samples(m, c("y"), 500); cat("y mean:", mean(p$y))');
+          await run('setup', 'webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE); untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal"); .libPaths(c("/tmp/rjags-lib", .libPaths()))');
+          await run('libs listing', 'cat(toString(list.files("/tmp/rjags-lib/rjags/libs", recursive=TRUE, all.files=TRUE)))');
+          await run('so size', 'cat(file.info("/tmp/rjags-lib/rjags/libs/rjags.so")$size)');
+          await run('control: dyn.load a known-good so', 'p <- list.files("/usr/lib/R/library/dplyr/libs", full.names=TRUE)[1]; cat("control so:", p); d <- dyn.load(p); cat("control dyn.load OK:", d[["dynamicLibrary"]]) ');
+          await run('dyn.load rjags', 'd <- dyn.load("/tmp/rjags-lib/rjags/libs/rjags.so"); cat("rjags dyn.load OK")');
+          await run('load rjags + load module', 'suppressWarnings(library(rjags)); rjags::load.module("base")');
+          await run('toy mcmc', 'm <- rjags::jags.model(textConnection("model { y ~ dnorm(0,1) }"), data = list(), n.chains = 1); rjags::update(m, 100); p <- rjags::jags.samples(m, c("y"), 500); cat("y mean:", mean(p$y))');
           process.exit(0);
           SMK
           cd /tmp && npm init -y >/dev/null 2>&1; npm install webr@0.6.0 >/dev/null 2>&1
-          node /tmp/smoke.mjs 2>&1 | tail -14 || true
+          node /tmp/smoke.mjs 2>&1 | tail -40 || true
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
