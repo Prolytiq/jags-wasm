@@ -283,13 +283,17 @@ jobs:
             local::pkgs/rjags_4-16.tar.gz
             gemtc
           repo-path: _site
-      - name: Add JAGS module side modules to the repo
+      - name: Add JAGS module side modules + rjags binary to the repo
         run: |
           set -euo pipefail
-          sudo mkdir -p _site/modules
+          sudo mkdir -p _site/modules _site/src/contrib
           sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
+          sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz _site/src/contrib/
           sudo chown -R $(id -u):$(id -g) _site
+          # regenerate the PACKAGES index including rjags (binary tarball fields)
+          Rscript -e 'tools::write_PACKAGES("_site/src/contrib", type = "source")'
           ls _site/modules | head -10
+          grep -E "^Package:" _site/src/contrib/PACKAGES
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
