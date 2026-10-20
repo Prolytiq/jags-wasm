@@ -137,6 +137,7 @@ jobs:
           # libjags + jrmath + all 8 modules compile to wasm. The jags-terminal binary
           # does NOT link (libtool dlpreopen is incompatible with emscripten) — and is
           # not needed: rjags uses libjags + modules directly (Phase 1).
+          make -C libltdl -j2 2>&1 | tail -3
           make -C src/jrmath -j2 2>&1 | tail -3
           make -C src/lib -j2 2>&1 | tail -3
           make -C src/modules -j2 2>&1 | tail -3
