@@ -169,7 +169,9 @@ jobs:
           rm -f configure configure.ac configure.in
           cat > src/Makevars <<'MKV'
           PKG_CPPFLAGS = -I/tmp/jags-wasm-install/include
-          PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc -L/tmp/lapack-wasm/lib -llapack -L/tmp/BLAS-3.12.0 -lblas /opt/flang/wasm/lib/libFortranRuntime.a
+          # No -llapack/-lblas: R already links libRlapack/libRblas into the process and
+# the rjags.so side module binds LAPACK/BLAS symbols against them at load time.
+          PKG_LIBS = -L/tmp/jags-wasm-install/lib -ljags -ljrmath -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
           MKV
           cd /tmp && tar czf rjags-mod.tar.gz rjags
           Rscript -e 'rwasm::build("/tmp/rjags", out_dir = "/tmp/rjags-out")' 2>&1 | tail -25
