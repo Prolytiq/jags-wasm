@@ -169,6 +169,9 @@ jobs:
           # rjags keeps its configure at the package ROOT; without it, R uses our
           # static src/Makevars directly (paths are known — no detection needed)
           rm -f configure configure.ac configure.in
+          # generate R/unix/zzz.R from the template (configure would normally do it):
+          # without this the installed package has no .onLoad and never loads the DLL
+          sed 's|@JAGS_MODDIR@|/tmp/jags-wasm-install/lib/jags/modules|' R/unix/zzz.R.in > R/unix/zzz.R
           cat > src/Makevars <<'MKV'
           PKG_CPPFLAGS = -I/tmp/jags-wasm-install/include
                     # No -llapack/-lblas: R already links libRlapack/libRblas into the process and
