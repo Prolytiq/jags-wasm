@@ -278,11 +278,13 @@ jobs:
           # stub dependencies for the install-time check (gemtc is pure R; the real
           # wasm rjags loads in the browser, not here)
           mkdir -p /tmp/stub/rjags /tmp/stub/coda
-          for d in "rjags 4-16" "coda 0.19-4.1" "igraph 2.1.4" "meta 8.5-0" "plyr 1.8.9" "Rglpk 0.6-5.4" "forcats 1.0.1"; do
+          for d in "rjags 4-16" "igraph 2.1.4" "meta 8.5-0" "plyr 1.8.9" "Rglpk 0.6-5.4" "forcats 1.0.1"; do
             set -- $d
             mkdir -p /tmp/stub/$1
             printf "Package: $1\nVersion: $2\n" > /tmp/stub/$1/DESCRIPTION
           done
+          # coda must REALLY load (lazy-loading executes it): install real coda+lattice
+          $HR/Rscript -e 'install.packages(c("lattice","coda"), lib="/tmp/stub", repos="https://cran.r-project.org", quiet=TRUE)' 2>&1 | tail -2
           export R_LIBS_USER=/tmp/stub
           $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -5
           mkdir -p /tmp/gemtc-out && find /tmp -maxdepth 1 -name "gemtc*.tgz" -exec cp {} /tmp/gemtc-out/ \;
