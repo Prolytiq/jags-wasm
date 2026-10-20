@@ -277,7 +277,7 @@ jobs:
         uses: r-wasm/actions/build-rwasm@v3
         with:
           packages: |
-            file:///tmp/stack/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz
+            /tmp/stack/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz
             gemtc
           repo-path: _site
       - name: Add JAGS module side modules to the repo
