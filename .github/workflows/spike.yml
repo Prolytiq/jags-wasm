@@ -155,6 +155,8 @@ jobs:
           find src/modules -name "*.a" -path "*.libs*" -exec cp {} $P/lib/jags/modules/ \;
           # Phase 1c: link each module as an emscripten SIDE MODULE (.so) — rjags's
           # libltdl searches the module dir for <name>.so at runtime
+          # netlib lapack ships its own lsame/xerbla which collide with BLAS's
+          emar d /tmp/lapack-wasm/lib/liblapack.a lsame.o xerbla.o xerbla_array.o 2>/dev/null || true
           for a in src/modules/*/.libs/lib*.a; do
             n=$(basename $a .a)
             # embed BLAS/LAPACK INSIDE each module: importing dtrmm_/dgemm_ from R's
