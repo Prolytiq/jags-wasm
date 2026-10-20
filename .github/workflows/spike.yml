@@ -153,6 +153,15 @@ jobs:
           cp src/lib/.libs/libjags.a $P/lib/
           cp src/jrmath/.libs/libjrmath.a $P/lib/
           find src/modules -name "*.a" -path "*.libs*" -exec cp {} $P/lib/jags/modules/ \;
+          # Phase 1c: link each module as an emscripten SIDE MODULE (.so) — rjags's
+          # libltdl searches the module dir for <name>.so at runtime
+          for a in src/modules/*/.libs/lib*.a; do
+            n=$(basename $a .a)
+            em++ -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz \
+              -Wl,--whole-archive "$a" -Wl,--no-whole-archive \
+              -o "$P/lib/jags/modules/${n}.so" 2>&1 | tail -2 || echo "side module $n FAILED"
+          done
+          ls -la $P/lib/jags/modules/ | head -25
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" 2>/dev/null | head -3
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \; 2>/dev/null || true
           ls -la $P/lib $P/lib/jags/modules | head -20
