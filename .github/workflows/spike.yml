@@ -115,7 +115,9 @@ jobs:
             fi
           fi
           echo "F77=$F77"
-          export CFLAGS="$(val CFLAGS)" CXXFLAGS="$(val CXXFLAGS)" FFLAGS="$(val FFLAGS)" FCFLAGS="$(val FCFLAGS)" LDFLAGS="$(val LDFLAGS)"
+          # everything ends up inside the rjags.so side module: ALL objects need PIC,
+          # but libtool strips -fPIC for static archives — force it here
+          export CFLAGS="$(val CFLAGS) -fPIC" CXXFLAGS="$(val CXXFLAGS) -fPIC" FFLAGS="$(val FFLAGS) -fPIC" FCFLAGS="$(val FCFLAGS) -fPIC" LDFLAGS="$(val LDFLAGS)"
           echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
           # JAGS hard-requires BLAS+LAPACK; use the wasm R's own copies
           # the wasm R's own blas/lapack — find the real dir (R build layout varies)
