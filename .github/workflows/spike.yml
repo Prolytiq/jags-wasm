@@ -322,9 +322,11 @@ jobs:
           # installed-tree tarballs, .tgz (webr's install_tgz format)
           sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz $V/rjags_4-16.tgz
           sudo cp pkgs/gemtc_1.1-2.tgz $V/gemtc_1.1-2.tgz
+          sudo cp pkgs/Rglpk_1.0-4.tgz $V/Rglpk_1.0-4.tgz
           sudo chown -R $(id -u):$(id -g) _site
           RJ_MD5=$(md5sum $V/rjags_4-16.tgz | cut -d" " -f1)
           GM_MD5=$(md5sum $V/gemtc_1.1-2.tgz | cut -d" " -f1)
+          RG_MD5=$(md5sum $V/Rglpk_1.0-4.tgz | cut -d" " -f1)
           REPO=https://prolytiq.github.io/jags-wasm/bin/emscripten/contrib/4.6
           cat > $V/PACKAGES <<IDX
           Package: rjags
@@ -334,6 +336,15 @@ jobs:
           MD5sum: $RJ_MD5
           Built: R 4.6.0; ; 2026-10-20 00:00:00 UTC; unix
           File: rjags_4-16.tgz
+          Repository: $REPO
+
+          Package: Rglpk
+          Version: 1.0-4
+          Depends: methods, Matrix, slam (>= 0.1-9)
+          License: GPL-3
+          MD5sum: $RG_MD5
+          Built: R 4.6.0; ; 2026-10-21 00:00:00 UTC; unix
+          File: Rglpk_1.0-4.tgz
           Repository: $REPO
 
           Package: gemtc
