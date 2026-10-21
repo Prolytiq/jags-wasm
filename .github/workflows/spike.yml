@@ -270,6 +270,11 @@ jobs:
         uses: r-lib/actions/setup-r@v2
         with:
           r-version: 'release'
+      - name: Install gemtc deps natively (lazy-load executes them at build)
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq libglpk-dev >/dev/null
+          Rscript -e 'install.packages(c("igraph","meta","coda","plyr","Rglpk","forcats","slam"), repos="https://cran.r-project.org", quiet=TRUE)' 2>&1 | tail -2
       - name: Download gemtc source
         run: |
           set -euo pipefail
