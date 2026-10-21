@@ -285,7 +285,7 @@ jobs:
         run: |
           set -euo pipefail
           cd /tmp && R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -4
-          mkdir -p pkgs && find /tmp -maxdepth 1 -name "gemtc_1.1-2_*.tar.gz" -exec cp {} pkgs/gemtc_1.1-2.tgz \;
+          mkdir -p "$GITHUB_WORKSPACE/pkgs" && find /tmp -maxdepth 1 -name "gemtc_1.1-2_*.tar.gz" -exec cp {} "$GITHUB_WORKSPACE/pkgs/gemtc_1.1-2.tgz" \;
           ls -la pkgs/
       - name: Stage rjags tarball into the workspace (visible inside the build container)
         run: |
