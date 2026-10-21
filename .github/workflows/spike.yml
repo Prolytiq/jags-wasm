@@ -296,13 +296,15 @@ jobs:
           echo "sysroot: $SYSROOT"
           cp /tmp/glpk-inc/glpk.h "$SYSROOT/include/"
           cp /tmp/glpk-lib/libglpk.a "$SYSROOT/lib/"
+          cp /tmp/glpk-lib/libglpk.a "$SYSROOT/lib/wasm32-emscripten/" 2>/dev/null || true
+          cp /tmp/glpk-lib/libglpk.a "$SYSROOT/lib/wasm32-emscripten/pic/" 2>/dev/null || true
           echo "glpk built:" && ls -la /tmp/glpk-lib/
           cd /tmp
           curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_0.6-5.1.tar.gz
           rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
           Rscript -e 'webr::install("slam", repos = "https://repo.r-wasm.org", quiet = TRUE)' 2>&1 | tail -1
-          CPATH=/tmp/glpk-inc LIBRARY_PATH=/tmp/glpk-lib \
-            R CMD INSTALL --build --no-test-load --no-docs --no-html . 2>&1 | tail -4
+          CPATH=/tmp/glpk-inc LIBRARY_PATH=/tmp/glpk-lib LDFLAGS="-L/tmp/glpk-lib" \
+            R CMD INSTALL --build --no-test-load --no-docs --no-html . 2>&1 | tail -6
           find /tmp -maxdepth 1 -name "Rglpk_*_R_*.tar.gz" -exec cp {} /out/Rglpk_0.6-5.1.tgz \;
           ls -la /out/
           EOS
