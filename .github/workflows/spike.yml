@@ -294,13 +294,13 @@ jobs:
             cp src/glpk.h /tmp/glpk-inc/ && cp src/.libs/libglpk.a /tmp/glpk-lib/
             echo "glpk built:" && ls -la /tmp/glpk-lib/
             cd /tmp
-            curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_1.0-4.tar.gz
+            curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_0.6-5.1.tar.gz
             rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
             mkdir -p ~/.R
             printf "PKG_CFLAGS = -I/tmp/glpk-inc\nPKG_LIBS = -L/tmp/glpk-lib -lglpk\n" > ~/.R/Makevars
             CFLAGS="-I/tmp/glpk-inc" CPPFLAGS="-I/tmp/glpk-inc" LDFLAGS="-L/tmp/glpk-lib" LIBS="-lglpk" \
               R CMD INSTALL --build --no-test-load --no-docs --no-html . 2>&1 | tail -4
-            find /tmp -maxdepth 1 -name "Rglpk*.tar.gz" -exec cp {} /out/Rglpk_1.0-4.tgz \;
+            find /tmp -maxdepth 1 -name "Rglpk*.tar.gz" -exec cp {} /out/Rglpk_0.6-5.1.tgz \;
             ls -la /out/
           '
       - name: Build gemtc binary (native R, lazy-load OK — deps installed natively)
@@ -322,11 +322,11 @@ jobs:
           # installed-tree tarballs, .tgz (webr's install_tgz format)
           sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz $V/rjags_4-16.tgz
           sudo cp pkgs/gemtc_1.1-2.tgz $V/gemtc_1.1-2.tgz
-          sudo cp pkgs/Rglpk_1.0-4.tgz $V/Rglpk_1.0-4.tgz
+          sudo cp pkgs/Rglpk_0.6-5.1.tgz $V/Rglpk_0.6-5.1.tgz
           sudo chown -R $(id -u):$(id -g) _site
           RJ_MD5=$(md5sum $V/rjags_4-16.tgz | cut -d" " -f1)
           GM_MD5=$(md5sum $V/gemtc_1.1-2.tgz | cut -d" " -f1)
-          RG_MD5=$(md5sum $V/Rglpk_1.0-4.tgz | cut -d" " -f1)
+          RG_MD5=$(md5sum $V/Rglpk_0.6-5.1.tgz | cut -d" " -f1)
           REPO=https://prolytiq.github.io/jags-wasm/bin/emscripten/contrib/4.6
           cat > $V/PACKAGES <<IDX
           Package: rjags
@@ -344,7 +344,7 @@ jobs:
           License: GPL-3
           MD5sum: $RG_MD5
           Built: R 4.6.0; ; 2026-10-21 00:00:00 UTC; unix
-          File: Rglpk_1.0-4.tgz
+          File: Rglpk_0.6-5.1.tgz
           Repository: $REPO
 
           Package: gemtc
