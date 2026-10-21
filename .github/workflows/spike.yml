@@ -218,7 +218,7 @@ jobs:
           await webR.init();
           const shelter = await new webR.Shelter();
           await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz'));
-          await webR.FS.mkdirTree('/tmp/jags-wasm-install/lib/jags/modules');
+          await webR.evalR('dir.create("/tmp/jags-wasm-install/lib/jags/modules", recursive = TRUE)');
           for (const f of fs.readdirSync('/tmp/jags-wasm-install/lib/jags/modules')) {
             if (f.endsWith('.so')) {
               await webR.FS.writeFile('/tmp/jags-wasm-install/lib/jags/modules/' + f, readFileSync('/tmp/jags-wasm-install/lib/jags/modules/' + f));
