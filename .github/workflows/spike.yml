@@ -281,6 +281,28 @@ jobs:
           curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz" || \
             curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.1-2.tar.gz"
           rm -rf /tmp/gemtc && tar xzf /tmp/gemtc.tar.gz -C /tmp
+      - name: Build GLPK + Rglpk (wasm, in the webr container)
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/pkgs:/out" ghcr.io/r-wasm/webr:main bash -c '
+            set -e
+            curl -fsSL -o /tmp/glpk.tar.gz https://ftp.gnu.org/gnu/glpk/glpk-5.0.tar.gz
+            tar xzf /tmp/glpk.tar.gz -C /tmp && cd /tmp/glpk-5.0
+            CC=emcc AR=emar RANLIB=emranlib ./configure --disable-shared --without-gmp --disable-cplex CFLAGS="-O2 -sWASM_BIGINT" >/dev/null 2>&1
+            make -j4 >/dev/null 2>&1
+            mkdir -p /tmp/glpk-inc /tmp/glpk-lib
+            cp src/glpk.h /tmp/glpk-inc/ && cp src/.libs/libglpk.a /tmp/glpk-lib/
+            echo "glpk built:" && ls -la /tmp/glpk-lib/
+            cd /tmp
+            curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_1.0-4.tar.gz
+            rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
+            mkdir -p ~/.R
+            printf "PKG_CFLAGS = -I/tmp/glpk-inc\nPKG_LIBS = -L/tmp/glpk-lib -lglpk\n" > ~/.R/Makevars
+            CFLAGS="-I/tmp/glpk-inc" CPPFLAGS="-I/tmp/glpk-inc" LDFLAGS="-L/tmp/glpk-lib" LIBS="-lglpk" \
+              R CMD INSTALL --build --no-test-load --no-docs --no-html . 2>&1 | tail -4
+            find /tmp -maxdepth 1 -name "Rglpk*.tar.gz" -exec cp {} /out/Rglpk_1.0-4.tgz \;
+            ls -la /out/
+          '
       - name: Build gemtc binary (native R, lazy-load OK — deps installed natively)
         run: |
           set -euo pipefail
