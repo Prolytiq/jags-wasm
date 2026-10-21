@@ -302,6 +302,11 @@ jobs:
           cd /tmp
           curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_0.6-5.1.tar.gz
           rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
+          # plant the prebuilt wasm GLPK where the vendored fallback expects it
+          mkdir -p src/GLPK
+          cp /tmp/glpk-lib/libglpk.a src/GLPK/
+          cp /tmp/glpk-inc/glpk.h src/GLPK/
+          printf 'all:\n\ttrue\n' > src/GLPK/Makefile
           Rscript -e 'webr::install("slam", repos = "https://repo.r-wasm.org", quiet = TRUE)' 2>&1 | tail -1
           # the container's R is NATIVE — the wasm build goes through rwasm::build
           Rscript -e 'rwasm::build("/tmp/Rglpk", out_dir = "/out")' 2>&1 | tail -40
