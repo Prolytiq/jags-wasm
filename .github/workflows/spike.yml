@@ -283,8 +283,7 @@ jobs:
       - name: Build gemtc binary (native R, lazy-load OK — deps installed natively)
         run: |
           set -euo pipefail
-          HR=$(ls -d /opt/webr/host/R-*/bin | head -1)
-          cd /tmp && $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -4
+          cd /tmp && R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -4
           mkdir -p pkgs && find /tmp -maxdepth 1 -name "gemtc*.tgz" -exec cp {} pkgs/ \;
           ls -la pkgs/
       - name: Stage rjags tarball into the workspace (visible inside the build container)
