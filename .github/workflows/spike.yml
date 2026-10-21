@@ -304,7 +304,7 @@ jobs:
           rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
           Rscript -e 'webr::install("slam", repos = "https://repo.r-wasm.org", quiet = TRUE)' 2>&1 | tail -1
           # the container's R is NATIVE — the wasm build goes through rwasm::build
-          Rscript -e 'rwasm::build("/tmp/Rglpk", out_dir = "/out")' 2>&1 | tail -6
+          Rscript -e 'rwasm::build("/tmp/Rglpk", out_dir = "/out")' 2>&1 | tail -40
           find /out -name "Rglpk*_R_*.tar.gz" -exec mv {} /out/Rglpk_0.6-5.1.tgz \;
           ls -la /out/
           EOS
