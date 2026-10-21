@@ -303,6 +303,11 @@ jobs:
           curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_0.6-5.1.tar.gz
           rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
           Rscript -e 'webr::install("slam", repos = "https://repo.r-wasm.org", quiet = TRUE)' 2>&1 | tail -1
+          cd /tmp && printf "#include <glpk.h>\nint main(){glp_prob*lp=glp_create_prob();glp_delete_prob(lp);return 0;}\n" > conftest.cc
+          echo "=== PROBE (verbose) ==="
+          CPATH=/tmp/glpk-inc LDFLAGS="-L/tmp/glpk-lib" R CMD SHLIB conftest.cc -lglpk 2>&1 | tail -8
+          ls -la conftest.so 2>&1
+          cd /tmp/Rglpk
           CPATH=/tmp/glpk-inc LIBRARY_PATH=/tmp/glpk-lib LDFLAGS="-L/tmp/glpk-lib" \
             R CMD INSTALL --build --no-test-load --no-docs --no-html . 2>&1 | tail -6
           find /tmp -maxdepth 1 -name "Rglpk_*_R_*.tar.gz" -exec cp {} /out/Rglpk_0.6-5.1.tgz \;
