@@ -280,18 +280,18 @@ jobs:
           set -euo pipefail
           curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz" || \
             curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.1-2.tar.gz"
+      - name: Build gemtc binary (native R, lazy-load OK — deps installed natively)
+        run: |
+          set -euo pipefail
+          HR=$(ls -d /opt/webr/host/R-*/bin | head -1)
+          cd /tmp && $HR/R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -4
+          mkdir -p pkgs && find /tmp -maxdepth 1 -name "gemtc*.tgz" -exec cp {} pkgs/ \;
+          ls -la pkgs/
       - name: Stage rjags tarball into the workspace (visible inside the build container)
         run: |
           mkdir -p pkgs
           find /tmp/stack -name "rjags*tar.gz" -exec cp {} pkgs/rjags_4-16.tar.gz \;
           ls -la pkgs/
-      - name: Build rjags + gemtc wasm binaries (official rwasm pipeline)
-        uses: r-wasm/actions/build-rwasm@v3
-        with:
-          packages: |
-            local::pkgs/rjags_4-16.tar.gz
-            gemtc
-          repo-path: _site
       - name: Assemble the webr binary repo (bin/emscripten/contrib/4.6) + modules
         run: |
           set -euo pipefail
@@ -299,7 +299,7 @@ jobs:
           sudo mkdir -p $V _site/modules
           # installed-tree tarballs, .tgz (webr's install_tgz format)
           sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz $V/rjags_4-16.tgz
-          sudo cp _site/src/contrib/gemtc_1.1-2.tar.gz $V/gemtc_1.1-2.tgz
+          sudo cp pkgs/gemtc_1.1-2.tgz $V/gemtc_1.1-2.tgz
           sudo chown -R $(id -u):$(id -g) _site
           RJ_MD5=$(md5sum $V/rjags_4-16.tgz | cut -d" " -f1)
           GM_MD5=$(md5sum $V/gemtc_1.1-2.tgz | cut -d" " -f1)
