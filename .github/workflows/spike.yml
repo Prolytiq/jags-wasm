@@ -292,14 +292,14 @@ jobs:
           make -j4 >/dev/null 2>&1
           mkdir -p /tmp/glpk-inc /tmp/glpk-lib
           cp src/glpk.h /tmp/glpk-inc/ && cp src/.libs/libglpk.a /tmp/glpk-lib/
+          cp /tmp/glpk-inc/glpk.h /usr/local/include/
+          cp /tmp/glpk-lib/libglpk.a /usr/local/lib/
           echo "glpk built:" && ls -la /tmp/glpk-lib/
           cd /tmp
           curl -fsSL -o Rglpk.tar.gz https://cran.r-project.org/src/contrib/Rglpk_0.6-5.1.tar.gz
           rm -rf Rglpk && tar xzf Rglpk.tar.gz && cd Rglpk
           Rscript -e 'webr::install("slam", repos = "https://repo.r-wasm.org", quiet = TRUE)' 2>&1 | tail -1
-          mkdir -p ~/.R
-          printf "PKG_CFLAGS = -I/tmp/glpk-inc\nPKG_LIBS = -L/tmp/glpk-lib -lglpk\n" > ~/.R/Makevars
-          CFLAGS="-I/tmp/glpk-inc" CPPFLAGS="-I/tmp/glpk-inc" LDFLAGS="-L/tmp/glpk-lib" LIBS="-lglpk" \
+          CPATH=/tmp/glpk-inc LIBRARY_PATH=/tmp/glpk-lib \
             R CMD INSTALL --build --no-test-load --no-docs --no-html . 2>&1 | tail -4
           find /tmp -maxdepth 1 -name "Rglpk_*_R_*.tar.gz" -exec cp {} /out/Rglpk_0.6-5.1.tgz \;
           ls -la /out/
