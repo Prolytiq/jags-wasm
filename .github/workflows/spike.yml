@@ -311,16 +311,19 @@ jobs:
           # the container's R is NATIVE — the wasm build goes through rwasm::build
           Rscript -e 'rwasm::build("/tmp/Rglpk", out_dir = "/out")' 2>&1 | tail -40
           find /out -name "Rglpk*_R_*.tar.gz" -exec mv {} /out/Rglpk_0.6-5.1.tgz \;
+          # --- gemtc (wasm): R deps in the wasm R first (lazy-load executes them),
+          # then rjags from our deployed binary repo, then the wasm build
+          Rscript -e 'webr::install(c("igraph","meta","plyr","forcats","Matrix","slam","coda"), repos = c("https://repo.r-wasm.org", "https://prolytiq.github.io/r-wasm-pkgs"), quiet = TRUE)' 2>&1 | tail -1
+          Rscript -e 'webr::install("rjags", repos = "https://prolytiq.github.io/jags-wasm", quiet = TRUE)' 2>&1 | tail -1
+          curl -fsSL -o /tmp/gemtc.tar.gz https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz
+          rm -rf /tmp/gemtc && tar xzf /tmp/gemtc.tar.gz -C /tmp
+          Rscript -e 'rwasm::build("/tmp/gemtc", out_dir = "/out")' 2>&1 | tail -10
+          find /out -name "gemtc*_R_*.tar.gz" -exec mv {} /out/gemtc_1.1-2.tgz \;
+          ls -la /out/
           ls -la /out/
           EOS
           sed -i 's/^          //' /tmp/glpk-build.sh
           docker run --rm -v "$PWD/pkgs:/out" -v /tmp/glpk-build.sh:/glpk-build.sh ghcr.io/r-wasm/webr:main bash /glpk-build.sh
-      - name: Build gemtc binary (native R, lazy-load OK — deps installed natively)
-        run: |
-          set -euo pipefail
-          cd /tmp && R CMD INSTALL --build --no-test-load --no-docs --no-html gemtc 2>&1 | tail -4
-          mkdir -p "$GITHUB_WORKSPACE/pkgs" && find /tmp -maxdepth 1 -name "gemtc_1.1-2_*.tar.gz" -exec cp {} "$GITHUB_WORKSPACE/pkgs/gemtc_1.1-2.tgz" \;
-          ls -la "$GITHUB_WORKSPACE/pkgs/"
       - name: Stage rjags tarball into the workspace (visible inside the build container)
         run: |
           mkdir -p pkgs
