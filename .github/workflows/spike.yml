@@ -280,6 +280,7 @@ jobs:
           set -euo pipefail
           curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/gemtc_1.1-2.tar.gz" || \
             curl -fsSL -o /tmp/gemtc.tar.gz "https://cran.r-project.org/src/contrib/Archive/gemtc/gemtc_1.1-2.tar.gz"
+          rm -rf /tmp/gemtc && tar xzf /tmp/gemtc.tar.gz -C /tmp
       - name: Build gemtc binary (native R, lazy-load OK — deps installed natively)
         run: |
           set -euo pipefail
