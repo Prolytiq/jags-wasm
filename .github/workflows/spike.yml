@@ -218,7 +218,12 @@ jobs:
           for f in $HDRS; do EXTRA_INC="$EXTRA_INC -I$(dirname "$f")"; done
           echo "extra includes: $EXTRA_INC"
 
-          ALLDIRS=$(find "$MODSRC" -type d 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')
+          # bugs' headers FIRST — bugs/matrix/lapack.h defines F77_DSYEV; msm has
+          # its own lapack.h with a different guard, and the wrong one wins if it
+          # comes first in the include path (the DMNorm F77_DSYEV failure)
+          ALLDIRS=$(find "$MODSRC"/bugs -type d 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')
+          ALLDIRS="$ALLDIRS $(find "$MODSRC" -mindepth 1 -maxdepth 1 -type d ! -name bugs 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')"
+          ALLDIRS="$ALLDIRS $(find "$MODSRC" -mindepth 2 -type d -not -path "$MODSRC/bugs/*" -not -path "$MODSRC/bugs" 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')"
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC $ALLDIRS"
           echo "=== debug: JAGS tree ==="
           ls -la "$JAGSTOP"/config.h 2>&1 || true
