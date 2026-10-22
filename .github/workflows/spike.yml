@@ -178,10 +178,8 @@ jobs:
         run: |
           set -euo pipefail
           # host R drives the wasm build via rwasm (same machinery build-rwasm uses)
-          for i in 1 2 3 4; do
-            Rscript -e 'install.packages("rwasm", repos=c("https://r-wasm.r-universe.dev","https://cran.r-project.org"))' 2>&1 | tail -2 && break
-            echo "retry $i: rwasm install failed"; sleep 30
-          done
+          # rwasm is preinstalled in the webr image; only try CRAN as a fallback
+          Rscript -e 'if (!requireNamespace("rwasm", quietly = TRUE)) install.packages("rwasm", repos = c("https://r-wasm.r-universe.dev", "https://cran.r-project.org"))' 2>&1 | tail -2
           curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/rjags_4-16.tar.gz" || \
             curl -fsSL -o /tmp/rjags.tar.gz "https://cran.r-project.org/src/contrib/Archive/rjags/rjags_4-16.tar.gz"
           cd /tmp && tar xzf rjags.tar.gz
