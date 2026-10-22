@@ -238,7 +238,8 @@ jobs:
           rm -rf /tmp/modbuild && mkdir -p /tmp/modbuild
           for m in bugs dic glm lecuyer mix msm; do
             mkdir -p /tmp/modbuild/$m
-            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) -not -path "*test*" -exec rsync -R {} /tmp/modbuild/$m/ \; 2>/dev/null || true)
+            # absolute-copy the sources (rsync -R was a no-op inside the container)
+            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) -not -path "*test*" -print0 | tar --null -cf - -T - | tar -xf - -C /tmp/modbuild/$m)
             (cd /tmp/modbuild/$m && find . \( -name "*.cc" -o -name "*.cpp" \) -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H -include "$JAGSTOP/config.h" $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
           done
           MODOBJS=$(find /tmp/modbuild -name "*.o" 2>/dev/null | tr '\n' ' ')
