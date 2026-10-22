@@ -216,7 +216,8 @@ jobs:
           HDRS=$(find "$JAGSTOP" \( -name "cholmod.h" -o -name "matexp.h" -o -name "matrix.h" -o -name "SuiteSparse_config.h" \) 2>/dev/null)
           for f in $HDRS; do EXTRA_INC="$EXTRA_INC -I$(dirname "$f")"; done
           echo "extra includes: $EXTRA_INC"
-          MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC -I$MODSRC/mix"
+          ALLDIRS=$(find "$MODSRC" -type d 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')
+          MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC $ALLDIRS"
           echo "=== debug: JAGS tree ==="
           ls -la "$JAGSTOP"/config.h 2>&1 || true
           ls "$JAGSTOP" | head -12 || true
