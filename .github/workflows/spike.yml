@@ -235,8 +235,6 @@ jobs:
           # (jags::base::BaseModule _base_module;) whose constructor inserts it
           # into the Console registry of the libjags.a also linked in this .so.
           # Nothing extra to generate; skip the glue entirely.
-          emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o
-          # call it from R_init_rjags: patch the registration source
           # append the module objects to the link
           sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS -Wl,--whole-archive|" src/Makevars
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
