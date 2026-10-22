@@ -223,7 +223,7 @@ jobs:
           ls "$JAGSTOP" | head -12 || true
           MODOBJS=""
           for m in basemod bugs dic glm lecuyer mix msm; do
-            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -not -path "*test*" -exec emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
+            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -not -path "*test*" -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
           done
           MODOBJS=$(find "$MODSRC"/basemod "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
           echo "module objects: $(echo $MODOBJS | wc -w)"
@@ -233,7 +233,7 @@ jobs:
           { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
             echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
           cat /tmp/static_modules.cc
-          emcc -std=gnu++20 -fPIC -Oz $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o
+          emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o
           # call it from R_init_rjags: patch the registration source
           RINIT=$(grep -rl "R_init_rjags" /tmp/rjags/src | head -1)
           echo "patching $RINIT"
