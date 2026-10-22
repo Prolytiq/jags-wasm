@@ -233,7 +233,11 @@ jobs:
           echo "module objects: $(echo $MODOBJS | wc -w)"
           # discover the factories: extern "C" void make<Name>Module() in each module dir
           FACTIONS=$(grep -rhoE "make[A-Za-z]+Module" "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm --include="*.cc" --include="*.h" --include="*.cpp" 2>/dev/null | sort -u) || FACTIONS=""
-          echo "raw matches: $(grep -rn 'Module(' "$MODSRC"/base/*.cc 2>/dev/null | head -3)"
+          echo "=== base.cc (first 45 lines) ==="
+          head -45 "$MODSRC/base/base.cc"
+          echo "=== bugs module entry ==="
+          ls "$MODSRC/bugs/"*.cc | head -3
+          head -30 "$MODSRC/bugs/bugs.cc" 2>/dev/null || true
           echo "factories discovered: $FACTIONS"
           { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
             echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
