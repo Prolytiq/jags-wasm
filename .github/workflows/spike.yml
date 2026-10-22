@@ -203,6 +203,45 @@ jobs:
           C_VISIBILITY =
           CXX_VISIBILITY =
           MKV
+          # --- rota B: link the JAGS modules statically into rjags.so -------------
+          # dlopen between side modules does not resolve (imports of a later
+          # side module are not satisfied by an earlier one in R.wasm's linker).
+          # JAGS's load.module short-circuits when the module is already in the
+          # static registry (list.modules()), so: compile the modules' sources,
+          # auto-discover their make*Module() factories, call them from a glue
+          # hook run by R_init_rjags.
+          MODSRC=$(ls -d /tmp/stack/JAGS-*/src/modules | head -1)
+          MODINC="-I$MODSRC -I/tmp/stack/JAGS-*/src/lib -I/tmp/stack/JAGS-*/src/include -I/tmp/jags-wasm-install/include"
+          MODOBJS=""
+          for m in basemod bugs dic glm lecuyer mix msm; do
+            (cd "$MODSRC/$m" && find . -name "*.cc" -o -name "*.cpp" | xargs emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c 2>&1 | tail -2) || echo "module $m compile notes"
+            MODOBJS="$MODOBJS $(find "$MODSRC/$m" -name "*.o" | tr '\n' ' ')"
+          done
+          # discover the factories: extern "C" void make<Name>Module() in each module dir
+          FACTIONS=$(grep -rhoE "void make[A-Za-z]+Module[[:space:]]*\(" "$MODSRC"/{basemod,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" --include="*.cpp" 2>/dev/null | sed -E 's/void (make[A-Za-z]+Module).*/\1/' | sort -u)
+          echo "factories discovered: $FACTIONS"
+          { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
+            echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
+          cat /tmp/static_modules.cc
+          emcc -std=gnu++20 -fPIC -Oz $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o
+          # call it from R_init_rjags: patch the registration source
+          RINIT=$(grep -rl "R_init_rjags" /tmp/rjags/src | head -1)
+          echo "patching $RINIT"
+          python3 - "$RINIT" <<'RIP'
+          import sys
+          p = sys.argv[1]
+          s = open(p).read()
+          glue = 'extern "C" void initJagsStaticModules();'
+          if 'initJagsStaticModules' not in s:
+              s = s.replace('void R_init_rjags', glue + '\nvoid R_init_rjags', 1)
+              s = s.replace('{', '{\n  initJagsStaticModules();', 1)
+              open(p, 'w').write(s)
+          print('patched R_init_rjags')
+          RIP
+          # append the module objects to the link
+          sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS /tmp/static_modules.o -Wl,--whole-archive|" src/Makevars
+          grep "PKG_LIBS" src/Makevars | head -c 400; echo
+          # ---------------------------------------------------------------------
           cd /tmp && tar czf rjags-mod.tar.gz rjags
           # own driver: same cross-compilation env as rwasm, but tolerant to the
           # tarball name and capturing the .so directly (see patches/rjags-build.R)
