@@ -241,6 +241,8 @@ jobs:
           # into the Console registry of the libjags.a also linked in this .so.
           # Nothing extra to generate; skip the glue entirely.
           # append the module objects to the link
+          # base/rngs' objects duplicate symbols already inside libjags.a — drop them
+          MODOBJS=$(echo $MODOBJS | tr ' ' '\n' | grep -v "$MODSRC/base/rngs/" | tr '\n' ' ')
           sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS -Wl,--whole-archive|" src/Makevars
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
           # ---------------------------------------------------------------------
