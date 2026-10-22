@@ -219,6 +219,7 @@ jobs:
           HDRS=$(find "$JAGSTOP" \( -name "cholmod.h" -o -name "matexp.h" -o -name "matrix.h" -o -name "SuiteSparse_config.h" \) 2>/dev/null)
           for f in $HDRS; do EXTRA_INC="$EXTRA_INC -I$(dirname "$f")"; done
           echo "extra includes: $EXTRA_INC"
+          grep -c "F77_DSYEV" "$JAGSTOP/config.h" || echo "F77_DSYEV not in config.h"
           ALLDIRS=$(find "$MODSRC" -type d 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC $ALLDIRS"
           echo "=== debug: JAGS tree ==="
@@ -227,13 +228,13 @@ jobs:
           echo "--- src/modules/:"; ls "$JAGSTOP/src/modules" 2>&1 | head -12
           echo "--- MODSRC=$MODSRC"
           MODOBJS=""
-          for m in basemod bugs dic glm lecuyer mix msm; do
-            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -not -path "*test*" -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
+          for m in base bugs dic glm lecuyer mix msm; do
+            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -not -path "*test*" -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H -include "$JAGSTOP/config.h" $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
           done
-          MODOBJS=$(find "$MODSRC"/basemod "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
+          MODOBJS=$(find "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
           echo "module objects: $(echo $MODOBJS | wc -w)"
           # discover the factories: extern "C" void make<Name>Module() in each module dir
-          FACTIONS=$(grep -rhoE "void make[A-Za-z]+Module[[:space:]]*\(" "$MODSRC"/{basemod,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" --include="*.cpp" 2>/dev/null | sed -E 's/void (make[A-Za-z]+Module).*/\1/' | sort -u)
+          FACTIONS=$(grep -rhoE "void make[A-Za-z]+Module[[:space:]]*\(" "$MODSRC"/{base,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" --include="*.cpp" 2>/dev/null | sed -E 's/void (make[A-Za-z]+Module).*/\1/' | sort -u)
           echo "factories discovered: $FACTIONS"
           { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
             echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
