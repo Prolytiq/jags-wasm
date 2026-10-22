@@ -233,17 +233,17 @@ jobs:
           MODOBJS=""
           # base (basemod) is already inside libjags.a — linking it again
           # duplicates everything (MSlicer, MersenneTwister...)
-          # clean build tree: the JAGS source carries autotools' .o files
-          # (libbugsfunc_la-Order.o etc.) — picking both copies duplicates symbols
-          rm -rf /tmp/modbuild && mkdir -p /tmp/modbuild
+          # The autotools build already produced correct module archives
+          # (libbugs.a, libglm.a... in src/modules/*/.libs). Link those —
+          # compiling the sources by hand re-created the F77-wrapper
+          # collisions. base is skipped (inside libjags.a).
+          MODARCHS=""
           for m in bugs dic glm lecuyer mix msm; do
-            mkdir -p /tmp/modbuild/$m
-            # absolute-copy the sources (rsync -R was a no-op inside the container)
-            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) -not -path "*test*" -print0 | tar --null -cf - -T - | tar -xf - -C /tmp/modbuild/$m)
-            (cd /tmp/modbuild/$m && find . \( -name "*.cc" -o -name "*.cpp" \) -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H -include "$JAGSTOP/config.h" $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
+            a=$(find "$MODSRC/$m" -name "lib${m}*.a" 2>/dev/null | tr '\n' ' ')
+            MODARCHS="$MODARCHS $a"
           done
-          MODOBJS=$(find /tmp/modbuild -name "*.o" 2>/dev/null | tr '\n' ' ')
-          echo "module objects: $(echo $MODOBJS | wc -w)"
+          MODOBJS=$MODARCHS
+          echo "module archives: $(echo $MODARCHS | xargs -n1 basename | tr '\n' ' ')"
           # modules self-register: each module's entry .cc holds a static instance
           # (jags::base::BaseModule _base_module;) whose constructor inserts it
           # into the Console registry of the libjags.a also linked in this .so.
@@ -262,8 +262,10 @@ jobs:
           # those live in the separately-loaded libbugsmatrix side module
           # drop bugs/matrix.o (own BLAS C signatures collide with netlib) but
           # KEEP glm/SSparse — its CHOLMOD symbols are needed by the GLM samplers
-          objs = ' '.join(o for o in sys.argv[1].split()
-                          if '/matrix.o' not in o or 'modbuild/bugs/' not in o)
+          # bugs' sources call dtrmm_/dgemv_ through wrappers that live in
+          # bugs/matrix (excluded above) — link the prebuilt libbugsmatrix.a
+          # instead of every bugs .o that needs them
+          objs = sys.argv[1].strip()
           libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
                   ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
                   ' /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a'
@@ -272,7 +274,7 @@ jobs:
           out = []
           for line in s.splitlines():
               if line.startswith('PKG_LIBS'):
-                  line = 'PKG_LIBS = ' + objs + ' ' + libs
+                  line = 'PKG_LIBS = -Wl,--whole-archive ' + objs + ' ' + libs
               out.append(line)
           out.append('')
           out.append('# rjags is linked STATICALLY (modules inside): a side module never')
