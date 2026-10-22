@@ -256,8 +256,10 @@ jobs:
           cd /tmp && tar czf rjags-mod.tar.gz rjags
           # own driver: same cross-compilation env as rwasm, but tolerant to the
           # tarball name and capturing the .so directly (see patches/rjags-build.R)
-          Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -25
+          Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -60
           file /tmp/rjags-out/* 2>/dev/null || true
+          echo "=== module sources still present? ==="
+          ls "$MODSRC" 2>&1 | head -4
       - name: Phase 1 smoke test — library(rjags) inside WebR (Node)
         run: |
           set -euo pipefail
