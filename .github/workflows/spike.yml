@@ -210,8 +210,9 @@ jobs:
           # static registry (list.modules()), so: compile the modules' sources,
           # auto-discover their make*Module() factories, call them from a glue
           # hook run by R_init_rjags.
-          MODSRC=$(ls -d /tmp/stack/JAGS-*/src/modules | head -1)
-          MODINC="-I$MODSRC -I/tmp/stack/JAGS-*/src/lib -I/tmp/stack/JAGS-*/src/include -I/tmp/jags-wasm-install/include"
+          MODSRC=$(ls -d /tmp/JAGS-*/src/modules | head -1)
+          JAGSTOP=$(dirname "$MODSRC")
+          MODINC="-I$MODSRC -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include"
           MODOBJS=""
           for m in basemod bugs dic glm lecuyer mix msm; do
             (cd "$MODSRC/$m" && find . -name "*.cc" -o -name "*.cpp" | xargs emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c 2>&1 | tail -2) || echo "module $m compile notes"
