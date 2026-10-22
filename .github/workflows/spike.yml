@@ -260,8 +260,10 @@ jobs:
           # bugs/matrix + glm/SSparse define their own BLAS symbols (dtrmm_...,
           # C signatures) that collide with the netlib libs embedded here —
           # those live in the separately-loaded libbugsmatrix side module
+          # drop bugs/matrix.o (own BLAS C signatures collide with netlib) but
+          # KEEP glm/SSparse — its CHOLMOD symbols are needed by the GLM samplers
           objs = ' '.join(o for o in sys.argv[1].split()
-                          if '/matrix.o' not in o and 'SSparse' not in o)
+                          if '/matrix.o' not in o or 'modbuild/bugs/' not in o)
           libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
                   ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
                   ' /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a'
