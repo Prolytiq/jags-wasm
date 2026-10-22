@@ -232,7 +232,8 @@ jobs:
           MODOBJS=$(find "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
           echo "module objects: $(echo $MODOBJS | wc -w)"
           # discover the factories: extern "C" void make<Name>Module() in each module dir
-          FACTIONS=$(grep -rhoE "void make[A-Za-z]+Module[[:space:]]*\(" "$MODSRC"/{base,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" --include="*.cpp" 2>/dev/null | sed -E 's/void (make[A-Za-z]+Module).*/\1/' | sort -u)
+          FACTIONS=$(grep -rhoE "make[A-Za-z]+Module" "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm --include="*.cc" --include="*.h" --include="*.cpp" 2>/dev/null | sort -u) || FACTIONS=""
+          echo "raw matches: $(grep -rn 'Module(' "$MODSRC"/base/*.cc 2>/dev/null | head -3)"
           echo "factories discovered: $FACTIONS"
           { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
             echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
