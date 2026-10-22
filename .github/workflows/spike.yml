@@ -223,7 +223,9 @@ jobs:
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC $ALLDIRS"
           echo "=== debug: JAGS tree ==="
           ls -la "$JAGSTOP"/config.h 2>&1 || true
-          ls "$JAGSTOP" | head -12 || true
+          echo "--- src/:"; ls "$JAGSTOP/src" 2>&1 | head -12
+          echo "--- src/modules/:"; ls "$JAGSTOP/src/modules" 2>&1 | head -12
+          echo "--- MODSRC=$MODSRC"
           MODOBJS=""
           for m in basemod bugs dic glm lecuyer mix msm; do
             (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -not -path "*test*" -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
