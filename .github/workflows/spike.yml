@@ -215,9 +215,10 @@ jobs:
           MODINC="-I$MODSRC -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include"
           MODOBJS=""
           for m in basemod bugs dic glm lecuyer mix msm; do
-            (cd "$MODSRC/$m" && find . -name "*.cc" -o -name "*.cpp" | xargs emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c 2>&1 | tail -2) || echo "module $m compile notes"
-            MODOBJS="$MODOBJS $(find "$MODSRC/$m" -name "*.o" | tr '\n' ' ')"
+            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -exec emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
           done
+          MODOBJS=$(find "$MODSRC"/basemod "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
+          echo "module objects: $(echo $MODOBJS | wc -w)"
           # discover the factories: extern "C" void make<Name>Module() in each module dir
           FACTIONS=$(grep -rhoE "void make[A-Za-z]+Module[[:space:]]*\(" "$MODSRC"/{basemod,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" --include="*.cpp" 2>/dev/null | sed -E 's/void (make[A-Za-z]+Module).*/\1/' | sort -u)
           echo "factories discovered: $FACTIONS"
