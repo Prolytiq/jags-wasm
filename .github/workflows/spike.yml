@@ -250,7 +250,11 @@ jobs:
           # Nothing extra to generate; skip the glue entirely.
           # append the module objects to the link
           # base/rngs' objects duplicate symbols already inside libjags.a — drop them
-          sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS -Wl,--whole-archive|" src/Makevars
+          # glm's objects pull BLAS/LAPACK symbols; importing them from R's
+          # libRblas fails on ABI (dgemm_) — embed our own, like the side modules do
+          sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS -Wl,--whole-archive \\
+            /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a -Wl,--no-whole-archive \\
+            -Wl,--whole-archive|" src/Makevars
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
           # ---------------------------------------------------------------------
           cd /tmp && tar czf rjags-mod.tar.gz rjags
