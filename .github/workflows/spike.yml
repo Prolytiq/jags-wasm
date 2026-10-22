@@ -237,11 +237,9 @@ jobs:
           # (libbugs.a, libglm.a... in src/modules/*/.libs). Link those —
           # compiling the sources by hand re-created the F77-wrapper
           # collisions. base is skipped (inside libjags.a).
-          MODARCHS=""
-          for m in bugs dic glm lecuyer mix msm; do
-            a=$(find "$MODSRC/$m" -name "lib${m}*.a" 2>/dev/null | tr '\n' ' ')
-            MODARCHS="$MODARCHS $a"
-          done
+          # only the TOP-LEVEL aggregator archive per module (libbugs.a contains
+          # libbugsdist/matrix/sampler/func — taking both duplicates everything)
+          MODARCHS=$(for m in bugs dic glm lecuyer mix msm; do find "$MODSRC/$m" -maxdepth 3 -name "lib${m}.a" 2>/dev/null; done | sort -u | tr '\n' ' ')
           MODOBJS=$MODARCHS
           echo "module archives: $(echo $MODARCHS | xargs -n1 basename | tr '\n' ' ')"
           # modules self-register: each module's entry .cc holds a static instance
