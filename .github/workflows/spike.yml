@@ -211,7 +211,7 @@ jobs:
           # auto-discover their make*Module() factories, call them from a glue
           # hook run by R_init_rjags.
           MODSRC=$(ls -d /tmp/JAGS-*/src/modules | head -1)
-          JAGSTOP=$(dirname "$MODSRC")
+          JAGSTOP=$(dirname "$(dirname "$MODSRC")")
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include"
           echo "=== debug: JAGS tree ==="
           ls -la "$JAGSTOP"/config.h 2>&1 || true
