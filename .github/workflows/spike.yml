@@ -268,8 +268,13 @@ jobs:
               if line.startswith('PKG_LIBS'):
                   line = 'PKG_LIBS = ' + objs + ' ' + libs
               out.append(line)
+          out.append('')
+          out.append('# rjags is linked STATICALLY (modules inside): a side module never')
+          out.append('# resolves its symbols internally — R.wasm\'s dlopen then cannot')
+          out.append(("# load it (2418 unresolved imports). Override the side-module flag:"))
+          out.append('override WASM_LDFLAGS = -s MAIN_MODULE=2 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm')
           open(p, 'w').write('\n'.join(out) + '\n')
-          print('rewrote Makevars PKG_LIBS')
+          print('rewrote Makevars PKG_LIBS + LDFLAGS override')
           MVP
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
           # ---------------------------------------------------------------------
