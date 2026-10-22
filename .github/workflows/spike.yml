@@ -251,10 +251,26 @@ jobs:
           # append the module objects to the link
           # base/rngs' objects duplicate symbols already inside libjags.a — drop them
           # glm's objects pull BLAS/LAPACK symbols; importing them from R's
-          # libRblas fails on ABI (dgemm_) — embed our own, like the side modules do
-          sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS -Wl,--whole-archive \\
-            /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a -Wl,--no-whole-archive \\
-            -Wl,--whole-archive|" src/Makevars
+          # libRblas fails on ABI (dgemm_) — embed our own, like the side modules do.
+          # (a python rewrite instead of sed: line continuations kept breaking make)
+          python3 - "$MODOBJS" <<'MVP'
+          import sys
+          p = '/tmp/rjags/src/Makevars'
+          s = open(p).read()
+          objs = sys.argv[1].strip()
+          libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
+                  ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
+                  ' /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a'
+                  ' -L/tmp/jags-wasm-install/lib -lltdlc'
+                  ' /opt/flang/wasm/lib/libFortranRuntime.a')
+          out = []
+          for line in s.splitlines():
+              if line.startswith('PKG_LIBS'):
+                  line = 'PKG_LIBS = ' + objs + ' ' + libs
+              out.append(line)
+          open(p, 'w').write('\n'.join(out) + '\n')
+          print('rewrote Makevars PKG_LIBS')
+          MVP
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
           # ---------------------------------------------------------------------
           cd /tmp && tar czf rjags-mod.tar.gz rjags
