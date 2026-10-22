@@ -218,8 +218,7 @@ jobs:
           # glm's objects pull BLAS/LAPACK symbols; importing them from R's
           # libRblas fails on ABI (dgemm_) — embed our own, like the side modules do.
           # (a python rewrite instead of sed: line continuations kept breaking make)
-          python3 - "$MODOBJS" <<'MVP'
-          import sys
+          python3 <<'MVP'
           p = '/tmp/rjags/src/Makevars'
           s = open(p).read()
           # bugs/matrix + glm/SSparse define their own BLAS symbols (dtrmm_...,
@@ -233,13 +232,12 @@ jobs:
           objs = sys.argv[1].strip()
           libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
                   ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
-                  ' /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a'
                   ' -L/tmp/jags-wasm-install/lib -lltdlc'
                   ' /opt/flang/wasm/lib/libFortranRuntime.a')
           out = []
           for line in s.splitlines():
               if line.startswith('PKG_LIBS'):
-                  line = 'PKG_LIBS = -Wl,--whole-archive ' + objs + ' ' + libs
+                  line = 'PKG_LIBS = ' + libs
               out.append(line)
           out.append('')
           open(p, 'w').write('\n'.join(out) + '\n')
@@ -252,8 +250,6 @@ jobs:
           # tarball name and capturing the .so directly (see patches/rjags-build.R)
           Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -60
           file /tmp/rjags-out/* 2>/dev/null || true
-          echo "=== modbuild tree (module objs) ==="
-          for m in bugs dic glm lecuyer mix msm; do echo "$m: $(find /tmp/modbuild/$m -name '*.o' 2>/dev/null | wc -l)"; done
       - name: Phase 1 smoke test — library(rjags) inside WebR (Node)
         run: |
           set -euo pipefail
