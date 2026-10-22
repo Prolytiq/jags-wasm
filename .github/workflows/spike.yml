@@ -212,7 +212,7 @@ jobs:
           # hook run by R_init_rjags.
           MODSRC=$(ls -d /tmp/JAGS-*/src/modules | head -1)
           JAGSTOP=$(dirname "$MODSRC")
-          MODINC="-I$MODSRC -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include"
+          MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include"
           MODOBJS=""
           for m in basemod bugs dic glm lecuyer mix msm; do
             (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -exec emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
@@ -230,13 +230,14 @@ jobs:
           RINIT=$(grep -rl "R_init_rjags" /tmp/rjags/src | head -1)
           echo "patching $RINIT"
           python3 - "$RINIT" <<'RIP'
-          import sys
+          import sys, re
           p = sys.argv[1]
           s = open(p).read()
           glue = 'extern "C" void initJagsStaticModules();'
           if 'initJagsStaticModules' not in s:
-              s = s.replace('void R_init_rjags', glue + '\nvoid R_init_rjags', 1)
-              s = s.replace('{', '{\n  initJagsStaticModules();', 1)
+              m = re.search(r'void R_init_rjags\s*\(', s)
+              brace = s.index('{', m.start())
+              s = s[:m.start()] + glue + '\n' + s[m.start():brace+1] + '\n  initJagsStaticModules();' + s[brace+1:]
               open(p, 'w').write(s)
           print('patched R_init_rjags')
           RIP
