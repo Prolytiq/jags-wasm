@@ -235,9 +235,10 @@ jobs:
           FACTIONS=$(grep -rhoE "make[A-Za-z]+Module" "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm --include="*.cc" --include="*.h" --include="*.cpp" 2>/dev/null | sort -u) || FACTIONS=""
           echo "=== base.cc (first 45 lines) ==="
           head -45 "$MODSRC/base/base.cc"
-          echo "=== bugs module entry ==="
-          ls "$MODSRC/bugs/"*.cc | head -3
-          head -30 "$MODSRC/bugs/bugs.cc" 2>/dev/null || true
+          echo "=== base.cc tail (factory) ==="
+          tail -25 "$MODSRC/base/base.cc"
+          echo "=== grep make in all modules ==="
+          grep -rn "make.*Module\|extern \"C\"" "$MODSRC"/{base,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" 2>/dev/null | grep -v "//" | head -12
           echo "factories discovered: $FACTIONS"
           { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
             echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
