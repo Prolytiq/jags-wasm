@@ -213,10 +213,10 @@ jobs:
           MODSRC=$(ls -d /tmp/JAGS-*/src/modules | head -1)
           JAGSTOP=$(dirname "$(dirname "$MODSRC")")
           EXTRA_INC=""
-          for h in cholmod.h matexp.h; do
-            d=$(find "$JAGSTOP" -name "$h" 2>/dev/null | head -1 | xargs dirname 2>/dev/null)
-            [ -n "$d" ] && EXTRA_INC="$EXTRA_INC -I$d"
+          for h in cholmod.h matexp.h matrix.h SuiteSparse_config.h; do
+            find "$JAGSTOP" -name "$h" 2>/dev/null | while read f; do EXTRA_INC="$EXTRA_INC -I$(dirname "$f")"; done
           done
+          export EXTRA_INC
           echo "extra includes: $EXTRA_INC"
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC -I$MODSRC/mix"
           echo "=== debug: JAGS tree ==="
