@@ -217,7 +217,7 @@ jobs:
           HDRS=$(find "$JAGSTOP" \( -name "cholmod.h" -o -name "matexp.h" -o -name "matrix.h" -o -name "SuiteSparse_config.h" \) 2>/dev/null)
           for f in $HDRS; do EXTRA_INC="$EXTRA_INC -I$(dirname "$f")"; done
           echo "extra includes: $EXTRA_INC"
-          grep -c "F77_DSYEV" "$JAGSTOP/config.h" || echo "F77_DSYEV not in config.h"
+
           ALLDIRS=$(find "$MODSRC" -type d 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC $ALLDIRS"
           echo "=== debug: JAGS tree ==="
@@ -237,22 +237,8 @@ jobs:
           # Nothing extra to generate; skip the glue entirely.
           emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o
           # call it from R_init_rjags: patch the registration source
-          RINIT=$(grep -rl "R_init_rjags" /tmp/rjags/src | head -1)
-          echo "patching $RINIT"
-          python3 - "$RINIT" <<'RIP'
-          import sys, re
-          p = sys.argv[1]
-          s = open(p).read()
-          glue = 'extern "C" void initJagsStaticModules();'
-          if 'initJagsStaticModules' not in s:
-              m = re.search(r'void R_init_rjags\s*\(', s)
-              brace = s.index('{', m.start())
-              s = s[:m.start()] + glue + '\n' + s[m.start():brace+1] + '\n  initJagsStaticModules();' + s[brace+1:]
-              open(p, 'w').write(s)
-          print('patched R_init_rjags')
-          RIP
           # append the module objects to the link
-          sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS /tmp/static_modules.o -Wl,--whole-archive|" src/Makevars
+          sed -i "s|PKG_LIBS = -Wl,--whole-archive|PKG_LIBS = $MODOBJS -Wl,--whole-archive|" src/Makevars
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
           # ---------------------------------------------------------------------
           cd /tmp && tar czf rjags-mod.tar.gz rjags
