@@ -221,7 +221,10 @@ jobs:
           await webR.evalR('dir.create("/tmp/jags-wasm-install/lib/jags/modules", recursive = TRUE)');
           for (const f of fs.readdirSync('/tmp/jags-wasm-install/lib/jags/modules')) {
             if (f.endsWith('.so')) {
-              await webR.FS.writeFile('/tmp/jags-wasm-install/lib/jags/modules/' + f, fs.readFileSync('/tmp/jags-wasm-install/lib/jags/modules/' + f));
+              const bytes = fs.readFileSync('/tmp/jags-wasm-install/lib/jags/modules/' + f);
+              await webR.FS.writeFile('/tmp/jags-wasm-install/lib/jags/modules/' + f, bytes);
+              const alias = f.replace(/^lib/, '');
+              if (alias !== f) await webR.FS.writeFile('/tmp/jags-wasm-install/lib/jags/modules/' + alias, bytes);
             }
           }
           const out = (kind, text) => { const t = String(text).slice(0, 1500); if (t.trim()) console.log(kind + ': ' + t); };
@@ -376,6 +379,11 @@ jobs:
           sed -i 's/^          //' $V/PACKAGES
           gzip -kf $V/PACKAGES
           sudo find /tmp/stack/jags-wasm-install/lib/jags/modules -name "*.so" -exec cp {} _site/modules/ \;
+          # libltdl resolves module names without the lib prefix (basemod.so, glm.so...)
+          for f in _site/modules/lib*.so; do
+            b=$(basename "$f"); alias="${b#lib}"
+            [ "$alias" != "$b" ] && cp "$f" "_site/modules/$alias"
+          done
           ls $V _site/modules | head -14
           grep -E "^Package:" $V/PACKAGES
       - name: Upload Pages artifact
