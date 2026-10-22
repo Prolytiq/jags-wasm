@@ -231,18 +231,10 @@ jobs:
           done
           MODOBJS=$(find "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
           echo "module objects: $(echo $MODOBJS | wc -w)"
-          # discover the factories: extern "C" void make<Name>Module() in each module dir
-          FACTIONS=$(grep -rhoE "make[A-Za-z]+Module" "$MODSRC"/base "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm --include="*.cc" --include="*.h" --include="*.cpp" 2>/dev/null | sort -u) || FACTIONS=""
-          echo "=== base.cc (first 45 lines) ==="
-          head -45 "$MODSRC/base/base.cc"
-          echo "=== base.cc tail (factory) ==="
-          tail -25 "$MODSRC/base/base.cc"
-          echo "=== grep make in all modules ==="
-          grep -rn "make.*Module\|extern \"C\"" "$MODSRC"/{base,bugs,dic,glm,lecuyer,mix,msm} --include="*.cc" 2>/dev/null | grep -v "//" | head -12
-          echo "factories discovered: $FACTIONS"
-          { echo '#include <cstddef>'; for f in $FACTIONS; do echo "extern \"C\" void $f();"; done; \
-            echo 'extern "C" void initJagsStaticModules() {'; for f in $FACTIONS; do echo "  $f();"; done; echo '}'; } > /tmp/static_modules.cc
-          cat /tmp/static_modules.cc
+          # modules self-register: each module's entry .cc holds a static instance
+          # (jags::base::BaseModule _base_module;) whose constructor inserts it
+          # into the Console registry of the libjags.a also linked in this .so.
+          # Nothing extra to generate; skip the glue entirely.
           emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o
           # call it from R_init_rjags: patch the registration source
           RINIT=$(grep -rl "R_init_rjags" /tmp/rjags/src | head -1)
