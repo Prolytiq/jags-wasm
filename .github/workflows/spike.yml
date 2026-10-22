@@ -257,7 +257,11 @@ jobs:
           import sys
           p = '/tmp/rjags/src/Makevars'
           s = open(p).read()
-          objs = sys.argv[1].strip()
+          # bugs/matrix + glm/SSparse define their own BLAS symbols (dtrmm_...,
+          # C signatures) that collide with the netlib libs embedded here —
+          # those live in the separately-loaded libbugsmatrix side module
+          objs = ' '.join(o for o in sys.argv[1].split()
+                          if '/matrix.o' not in o and 'SSparse' not in o)
           libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
                   ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
                   ' /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a'
