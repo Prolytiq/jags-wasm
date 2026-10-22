@@ -198,50 +198,17 @@ jobs:
           # --whole-archive: import-dynamic would otherwise turn libjags's unresolved
           # symbols into dynamic imports and skip pulling archive members entirely.
           PKG_LIBS = -Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive -L/tmp/jags-wasm-install/lib -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
-          LDFLAGS = -s MAIN_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz
+          # GC_SECTIONS=0: keep every libjags symbol exported (the module .so
+          # files import ~900 of them; pruning made them unresolvable)
+          LDFLAGS = -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -s GC_SECTIONS=0 -Oz
           # webr-vars.mk hides visibility, which lets the linker GC R_init_rjags
           # (nothing references it internally) — R's registration then never runs.
           C_VISIBILITY =
           CXX_VISIBILITY =
           MKV
-          # --- rota B: link the JAGS modules statically into rjags.so -------------
-          # dlopen between side modules does not resolve (imports of a later
-          # side module are not satisfied by an earlier one in R.wasm's linker).
-          # JAGS's load.module short-circuits when the module is already in the
-          # static registry (list.modules()), so: compile the modules' sources,
-          # auto-discover their make*Module() factories, call them from a glue
-          # hook run by R_init_rjags.
-          MODSRC=$(ls -d /tmp/JAGS-*/src/modules | head -1)
-          JAGSTOP=$(dirname "$(dirname "$MODSRC")")
-          EXTRA_INC=""
-          HDRS=$(find "$JAGSTOP" \( -name "cholmod.h" -o -name "matexp.h" -o -name "matrix.h" -o -name "SuiteSparse_config.h" \) 2>/dev/null)
-          for f in $HDRS; do EXTRA_INC="$EXTRA_INC -I$(dirname "$f")"; done
-          echo "extra includes: $EXTRA_INC"
-
-          # bugs' headers FIRST — bugs/matrix/lapack.h defines F77_DSYEV; msm has
-          # its own lapack.h with a different guard, and the wrong one wins if it
-          # comes first in the include path (the DMNorm F77_DSYEV failure)
-          ALLDIRS=$(find "$MODSRC"/bugs -type d 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')
-          ALLDIRS="$ALLDIRS $(find "$MODSRC" -mindepth 1 -maxdepth 1 -type d ! -name bugs 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')"
-          ALLDIRS="$ALLDIRS $(find "$MODSRC" -mindepth 2 -type d -not -path "$MODSRC/bugs/*" -not -path "$MODSRC/bugs" 2>/dev/null | sed 's/^/-I/' | tr '\n' ' ')"
-          MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include $EXTRA_INC $ALLDIRS"
-          echo "=== debug: JAGS tree ==="
-          ls -la "$JAGSTOP"/config.h 2>&1 || true
-          echo "--- src/:"; ls "$JAGSTOP/src" 2>&1 | head -12
-          echo "--- src/modules/:"; ls "$JAGSTOP/src/modules" 2>&1 | head -12
-          echo "--- MODSRC=$MODSRC"
-          MODOBJS=""
-          # base (basemod) is already inside libjags.a — linking it again
-          # duplicates everything (MSlicer, MersenneTwister...)
-          # The autotools build already produced correct module archives
-          # (libbugs.a, libglm.a... in src/modules/*/.libs). Link those —
-          # compiling the sources by hand re-created the F77-wrapper
-          # collisions. base is skipped (inside libjags.a).
-          # only the TOP-LEVEL aggregator archive per module (libbugs.a contains
-          # libbugsdist/matrix/sampler/func — taking both duplicates everything)
-          MODARCHS=$(for m in bugs dic glm lecuyer mix msm; do find "$MODSRC/$m" -maxdepth 3 -name "lib${m}.a" 2>/dev/null; done | sort -u | tr '\n' ' ')
-          MODOBJS=$MODARCHS
-          echo "module archives: $(echo $MODARCHS | xargs -n1 basename | tr '\n' ' ')"
+          # The module .so side modules stay SEPARATE (the deploy step links them
+          # with embedded BLAS/LAPACK). rjags.so is built with GC_SECTIONS=0 below
+          # so it keeps exporting every libjags symbol the modules dlopen-import.
           # modules self-register: each module's entry .cc holds a static instance
           # (jags::base::BaseModule _base_module;) whose constructor inserts it
           # into the Console registry of the libjags.a also linked in this .so.
@@ -275,10 +242,6 @@ jobs:
                   line = 'PKG_LIBS = -Wl,--whole-archive ' + objs + ' ' + libs
               out.append(line)
           out.append('')
-          out.append('# rjags is linked STATICALLY (modules inside): a side module never')
-          out.append('# resolves its symbols internally — R.wasm\'s dlopen then cannot')
-          out.append(("# load it (2418 unresolved imports). Override the side-module flag:"))
-          out.append('override WASM_LDFLAGS = -s MAIN_MODULE=2 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm')
           open(p, 'w').write('\n'.join(out) + '\n')
           print('rewrote Makevars PKG_LIBS + LDFLAGS override')
           MVP
