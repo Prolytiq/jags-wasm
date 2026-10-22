@@ -213,9 +213,12 @@ jobs:
           MODSRC=$(ls -d /tmp/JAGS-*/src/modules | head -1)
           JAGSTOP=$(dirname "$MODSRC")
           MODINC="-I$MODSRC -I$JAGSTOP -I$JAGSTOP/src/lib -I$JAGSTOP/src/include -I/tmp/jags-wasm-install/include"
+          echo "=== debug: JAGS tree ==="
+          ls -la "$JAGSTOP"/config.h 2>&1 || true
+          ls "$JAGSTOP" | head -12 || true
           MODOBJS=""
           for m in basemod bugs dic glm lecuyer mix msm; do
-            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -exec emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
+            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" \) -not -path "*test*" -exec emcc -std=gnu++20 -fPIC -Oz $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
           done
           MODOBJS=$(find "$MODSRC"/basemod "$MODSRC"/bugs "$MODSRC"/dic "$MODSRC"/glm "$MODSRC"/lecuyer "$MODSRC"/mix "$MODSRC"/msm -name "*.o" 2>/dev/null | tr '\n' ' ')
           echo "module objects: $(echo $MODOBJS | wc -w)"
