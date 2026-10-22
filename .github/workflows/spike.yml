@@ -166,7 +166,7 @@ jobs:
             n=$(basename $a .a)
             # embed BLAS/LAPACK INSIDE each module: importing dtrmm_/dgemm_ from R's
             # libRblas fails on ABI (signature mismatch); internal copies bind statically
-            em++ -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=2 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz \
+            em++ -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz \
               -Wl,--whole-archive "$a" /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a /opt/flang/wasm/lib/libFortranRuntime.a -Wl,--no-whole-archive \
               -o "$P/lib/jags/modules/${n}.so" 2>&1 | tail -2 || echo "side module $n FAILED"
           done
@@ -197,7 +197,7 @@ jobs:
           # --whole-archive: import-dynamic would otherwise turn libjags's unresolved
           # symbols into dynamic imports and skip pulling archive members entirely.
           PKG_LIBS = -Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive -L/tmp/jags-wasm-install/lib -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
-          LDFLAGS = -s MAIN_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=2 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz
+          LDFLAGS = -s MAIN_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz
           # webr-vars.mk hides visibility, which lets the linker GC R_init_rjags
           # (nothing references it internally) — R's registration then never runs.
           C_VISIBILITY =
