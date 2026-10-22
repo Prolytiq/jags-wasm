@@ -234,7 +234,6 @@ jobs:
           await run('setup', 'webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE); untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal"); .libPaths(c("/tmp/rjags-lib", .libPaths()))');
           await run('libs listing', 'cat(toString(list.files("/tmp/rjags-lib/rjags/libs", recursive=TRUE, all.files=TRUE)))');
           await run('so size', 'cat(file.info("/tmp/rjags-lib/rjags/libs/rjags.so")$size)');
-          await run('control: dyn.load a known-good so', 'p <- list.files("/usr/lib/R/library/dplyr/libs", full.names=TRUE)[1]; cat("control so:", p); d <- dyn.load(p); cat("control dyn.load OK:", d[["dynamicLibrary"]]) ');
           await run('dyn.load rjags', 'd <- dyn.load("/tmp/rjags-lib/rjags/libs/rjags.so"); cat("rjags dyn.load OK")');
           await run('load rjags + load module', 'suppressWarnings(library(rjags)); rjags::load.module("base")');
           await run('toy mcmc', 'm <- rjags::jags.model(textConnection("model { y ~ dnorm(0,1) }"), data = list(), n.chains = 1); rjags::update(m, 100); p <- rjags::jags.samples(m, c("y"), 500); cat("y mean:", mean(p$y))');
