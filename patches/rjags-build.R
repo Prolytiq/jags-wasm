@@ -27,7 +27,9 @@ cat(readLines(system.file("webr-vars.mk", package = "rwasm")),
     "# aggregators): a side module never resolves its symbols internally and",
     "# R.wasm's dlopen cannot satisfy cross-side-module imports. This MUST be",
     "# an override AFTER webr-vars.mk's '+=' SIDE_MODULE (last flag wins in emcc).",
-    "override WASM_LDFLAGS = -s MAIN_MODULE=2 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm",
+    "override WASM_LDFLAGS = -s MAIN_MODULE=1 -s EXPORT_ALL=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm
+    # MAIN_MODULE=2 kept the dylink section but GC'd R_init_rjags — R's .Call
+    # registration never ran ("get_modules not available"). EXPORT_ALL keeps it.",
     file = combined, sep = "\n")
 webr_vars <- combined
 webr_profile <- system.file("webr-profile", package = "rwasm")
