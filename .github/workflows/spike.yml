@@ -174,52 +174,68 @@ jobs:
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" 2>/dev/null | head -3
           find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \; 2>/dev/null || true
           ls -la $P/lib $P/lib/jags/modules | head -20
-      - name: Phase 1 — use the prebuilt static rjags (modules linked inside)
+      - name: Phase 1 — assemble rjags (side-module rjags.so + R code with .onLoad)
         run: |
           set -euo pipefail
-          # the static-modules build (MAIN_MODULE=2 via rjags-build.R override) is
-          # committed as pkgs/rjags_4-16_prebuilt.tar.gz: a 1.2MB rjags.so with the
-          # JAGS modules linked in — the build that loads library(rjags)+library(gemtc)
-          # with every dependency TRUE. The side-module build dlopens nothing.
+          # rjags.so: the side-module build (pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz,
+          # libjags linked in). The JAGS modules stay separate side modules: they
+          # resolve their libjags imports against rjags.so because .onLoad loads it
+          # with library.dynam(local = FALSE). NEVER dyn.load(rjags.so) by hand
+          # first — that registers it RTLD_LOCAL, library.dynam then skips it, and
+          # every module dlopen dies with "TypeError: resolved is not a function".
+          # That tarball's R code predates the zzz.R generation (no .onLoad, the DLL
+          # never loads), so rebuild only the R code from the CRAN source here.
+          curl -fsSL -o /tmp/rjags-src.tar.gz "https://cran.r-project.org/src/contrib/rjags_4-16.tar.gz" || \
+            curl -fsSL -o /tmp/rjags-src.tar.gz "https://cran.r-project.org/src/contrib/Archive/rjags/rjags_4-16.tar.gz"
+          rm -rf /tmp/rjags-r /tmp/rjags-rlib /tmp/rjags-pkg && mkdir -p /tmp/rjags-r /tmp/rjags-rlib /tmp/rjags-pkg
+          tar xzf /tmp/rjags-src.tar.gz -C /tmp/rjags-r
+          cd /tmp/rjags-r/rjags
+          rm -rf configure configure.ac configure.win cleanup src
+          sed 's|@JAGS_MODDIR@|/tmp/jags-wasm-install/lib/jags/modules|' R/unix/zzz.R.in > R/unix/zzz.R
+          Rscript -e 'install.packages("coda", lib = "/tmp/rjags-rlib", repos = "https://cran.r-project.org", quiet = TRUE)'
+          R_LIBS=/tmp/rjags-rlib R CMD INSTALL --library=/tmp/rjags-rlib --no-test-load --no-docs --no-html --no-byte-compile /tmp/rjags-r/rjags
+          tar xzf "$GITHUB_WORKSPACE/pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz" -C /tmp/rjags-pkg
+          rm -rf /tmp/rjags-pkg/rjags/R
+          cp -r /tmp/rjags-rlib/rjags/R /tmp/rjags-pkg/rjags/R
+          Rscript -e 'e <- new.env(); lazyLoad("/tmp/rjags-pkg/rjags/R/rjags", envir = e); stopifnot(is.function(e$.onLoad))'
           mkdir -p /tmp/rjags-out
-          cp pkgs/rjags_4-16_prebuilt.tar.gz /tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz
+          tar czf /tmp/rjags-out/rjags_4-16.tgz -C /tmp/rjags-pkg rjags
           ls -la /tmp/rjags-out/
-      - name: Phase 1 smoke test — library(rjags) inside WebR (Node)
+      - name: Phase 1 smoke test — production install path + toy MCMC (Node)
         run: |
           set -euo pipefail
           cat > /tmp/smoke.mjs <<'SMK'
           import { WebR } from 'webr';
           import fs from 'fs';
+          // mirrors fts-app installJagsPackage(): untar, jags.moddir, modules, library()
           const webR = new WebR();
           await webR.init();
           const shelter = await new webR.Shelter();
-          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', fs.readFileSync(process.env.GITHUB_WORKSPACE + '/pkgs/rjags_4-16_prebuilt.tar.gz'));
-          await webR.evalR('dir.create("/tmp/jags-wasm-install/lib/jags/modules", recursive = TRUE)');
-          for (const f of fs.readdirSync('/tmp/jags-wasm-install/lib/jags/modules')) {
-            if (f.endsWith('.so')) {
-              const bytes = fs.readFileSync('/tmp/jags-wasm-install/lib/jags/modules/' + f);
-              await webR.FS.writeFile('/tmp/jags-wasm-install/lib/jags/modules/' + f, bytes);
-              const alias = f.replace(/^lib/, '');
-              if (alias !== f) await webR.FS.writeFile('/tmp/jags-wasm-install/lib/jags/modules/' + alias, bytes);
-            }
+          const MODDIR = '/tmp/jags-wasm-install/lib/jags/modules';
+          await webR.installPackages(['coda'], { repos: ['https://prolytiq.github.io/r-wasm-pkgs/', 'https://repo.r-wasm.org/'], quiet: true });
+          await webR.FS.writeFile('/tmp/rjags-install.tgz', fs.readFileSync('/tmp/rjags-out/rjags_4-16.tgz'));
+          await shelter.evalR('untar("/tmp/rjags-install.tgz", exdir = .libPaths()[[1]], tar = "internal")');
+          await shelter.evalR(`options(jags.moddir = "${MODDIR}"); dir.create("${MODDIR}", recursive = TRUE)`);
+          for (const f of fs.readdirSync(MODDIR)) {
+            if (!f.endsWith('.so')) continue;
+            const bytes = fs.readFileSync(`${MODDIR}/${f}`);
+            await webR.FS.writeFile(`${MODDIR}/${f}`, bytes);
+            const alias = f.replace(/^lib/, '');
+            if (alias !== f) await webR.FS.writeFile(`${MODDIR}/${alias}`, bytes);
           }
-          const out = (kind, text) => { const t = String(text).slice(0, 1500); if (t.trim()) console.log(kind + ': ' + t); };
-          const run = async (label, code) => {
-            const o = await shelter.captureR(code, { captureConditions: true, captureStreams: true, captureMessage: true });
-            for (const e of o.output) out(label + ' [' + e.type + ']', typeof e.data === 'string' ? e.data : '');
-            if (o.error) out(label + ' [ERROR]', '');
-            console.log(label + ' => done');
-          };
-          await run('setup', 'webr::install("coda", repos = "https://prolytiq.github.io/r-wasm-pkgs/", quiet = TRUE); untar("/tmp/rjags-bin.tar.gz", exdir = "/tmp/rjags-lib", tar = "internal"); .libPaths(c("/tmp/rjags-lib", .libPaths()))');
-          await run('libs listing', 'cat(toString(list.files("/tmp/rjags-lib/rjags/libs", recursive=TRUE, all.files=TRUE)))');
-          await run('so size', 'cat(file.info("/tmp/rjags-lib/rjags/libs/rjags.so")$size)');
-          await run('dyn.load rjags', 'd <- dyn.load("/tmp/rjags-lib/rjags/libs/rjags.so"); cat("rjags dyn.load OK")');
-          await run('load rjags + load module', 'suppressWarnings(library(rjags)); rjags::load.module("base")');
-          await run('toy mcmc', 'm <- rjags::jags.model(textConnection("model { y ~ dnorm(0,1) }"), data = list(), n.chains = 1); rjags::update(m, 100); p <- rjags::jags.samples(m, c("y"), 500); cat("y mean:", mean(p$y))');
-          process.exit(0);
+          const o = await shelter.captureR(`r <- tryCatch({
+              suppressWarnings(library(rjags)); cat("modules:", list.modules(), "\n")
+              m <- jags.model(textConnection("model { y ~ dnorm(0,1) }"), n.chains = 1, quiet = TRUE)
+              s <- jags.samples(m, "y", 2000); cat("y mean:", mean(s$y), " sd:", sd(as.numeric(s$y)), "\n")
+              "MCMC_OK"
+            }, error = function(e) paste("ERROR:", conditionMessage(e)))
+            cat(r, "\n")`, { captureConditions: false, captureStreams: true });
+          const text = o.output.map((e) => String(e.data)).join('\n');
+          console.log(text);
+          process.exit(/MCMC_OK/.test(text) ? 0 : 1);
           SMK
           cd /tmp && npm init -y >/dev/null 2>&1; npm install webr@0.6.0 >/dev/null 2>&1
-          node /tmp/smoke.mjs 2>&1 | tail -40 || true
+          node /tmp/smoke.mjs
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
@@ -305,7 +321,7 @@ jobs:
       - name: Stage rjags tarball into the workspace (visible inside the build container)
         run: |
           mkdir -p pkgs
-          find /tmp/stack -name "rjags*tar.gz" -exec cp {} pkgs/rjags_4-16.tar.gz \;
+          cp /tmp/stack/rjags-out/rjags_4-16.tgz pkgs/rjags_4-16.tar.gz
           ls -la pkgs/
       - name: Assemble the webr binary repo (bin/emscripten/contrib/4.6) + modules
         run: |
@@ -313,7 +329,7 @@ jobs:
           V=_site/bin/emscripten/contrib/4.6
           sudo mkdir -p $V _site/modules
           # installed-tree tarballs, .tgz (webr's install_tgz format)
-          sudo cp pkgs/rjags_4-16_prebuilt.tar.gz $V/rjags_4-16.tgz
+          sudo cp /tmp/stack/rjags-out/rjags_4-16.tgz $V/rjags_4-16.tgz
           sudo cp pkgs/gemtc_1.1-2.tgz $V/gemtc_1.1-2.tgz
           sudo cp pkgs/Rglpk_0.6-5.1.tgz $V/Rglpk_0.6-5.1.tgz
           sudo chown -R $(id -u):$(id -g) _site
