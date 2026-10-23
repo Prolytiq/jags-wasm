@@ -23,6 +23,11 @@ cat(readLines(system.file("webr-vars.mk", package = "rwasm")),
     "# rjags-wasm overrides — keep R_init_rjags exportable",
     "C_VISIBILITY =",
     "CXX_VISIBILITY =",
+    "# rjags is linked with the JAGS modules STATICALLY inside (whole-archive",
+    "# aggregators): a side module never resolves its symbols internally and",
+    "# R.wasm's dlopen cannot satisfy cross-side-module imports. This MUST be",
+    "# an override AFTER webr-vars.mk's '+=' SIDE_MODULE (last flag wins in emcc).",
+    "override WASM_LDFLAGS = -s MAIN_MODULE=2 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm",
     file = combined, sep = "\n")
 webr_vars <- combined
 webr_profile <- system.file("webr-profile", package = "rwasm")
