@@ -311,6 +311,10 @@ jobs:
           # tarball name and capturing the .so directly (see patches/rjags-build.R)
           Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -60
           file /tmp/rjags-out/* 2>/dev/null || true
+          echo "=== Makevars final (PKG_LIBS/LDFLAGS/override) ==="
+          grep -E "PKG_LIBS|LDFLAGS|override" /tmp/rjags/src/Makevars | head -8
+          echo "=== rjags-out sizes ==="
+          ls -la /tmp/rjags-out/ 2>/dev/null || echo "rjags-out ABSENT"
           echo "=== modbuild tree (module objs) ==="
           for m in bugs dic glm lecuyer mix msm; do echo "$m: $(find /tmp/modbuild/$m -name '*.o' 2>/dev/null | wc -l)"; done
       - name: Phase 1 smoke test — library(rjags) inside WebR (Node)
