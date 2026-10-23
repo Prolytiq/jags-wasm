@@ -233,41 +233,21 @@ jobs:
           MODOBJS=""
           # base (basemod) is already inside libjags.a — linking it again
           # duplicates everything (MSlicer, MersenneTwister...)
-          # The autotools build already produced correct module archives
-          # (libbugs.a, libglm.a... in src/modules/*/.libs). Link those —
-          # compiling the sources by hand re-created the F77-wrapper
-          # collisions. base is skipped (inside libjags.a).
-          # only the TOP-LEVEL aggregator archive per module (libbugs.a contains
-          # libbugsdist/matrix/sampler/func — taking both duplicates everything)
-          MODARCHS=$(for m in bugs dic glm lecuyer mix msm; do find "$MODSRC/$m" -maxdepth 3 -name "lib${m}.a" 2>/dev/null; done | sort -u | tr '\n' ' ')
-          MODOBJS=$MODARCHS
-          echo "module archives: $(echo $MODARCHS | xargs -n1 basename | tr '\n' ' ')"
-          # static registration with EXPLICIT constructor calls: the modules'
-          # static instances did not self-register under MAIN_MODULE=2 dlopen
-          # (list.modules() came back empty and mtc.run aborted on missing
-          # samplers). Each entry .cc gets an extern "C" factory that
-          # constructs the module class (Module's ctor inserts it into the
-          # registry), and a glue .cc with its own static initializer calls
-          # every factory when rjags.so is dlopened.
-          GLUE=""; CALLS=""
-          for m in base bugs dic glm lecuyer mix msm; do
-            case "$m" in
-              base) C=BaseModule ;;
-              bugs) C=BugsModule ;;
-              dic) C=DicModule ;;
-              glm) C=GlmModule ;;
-              lecuyer) C=LecuyerModule ;;
-              mix) C=MixModule ;;
-              msm) C=MSMModule ;;
-            esac
-            printf '\nextern "C" void jags_static_make_%s() { static jags::%s::%s inst; }\n' "$m" "$m" "$C" >> "$MODSRC/$m/$m.cc"
-            GLUE="$GLUE extern \"C\" void jags_static_make_$m();"
-            CALLS="$CALLS jags_static_make_$m();"
+          # clean build tree: the JAGS source carries autotools' .o files
+          # (libbugsfunc_la-Order.o etc.) — picking both copies duplicates symbols
+          rm -rf /tmp/modbuild && mkdir -p /tmp/modbuild
+          for m in bugs dic glm lecuyer mix msm; do
+            mkdir -p /tmp/modbuild/$m
+            # absolute-copy the sources (rsync -R was a no-op inside the container)
+            (cd "$MODSRC/$m" && find . \( -name "*.cc" -o -name "*.cpp" -o -name "*.h" \) -not -path "*test*" -print0 | tar --null -cf - -T - | tar -xf - -C /tmp/modbuild/$m)
+            (cd /tmp/modbuild/$m && find . \( -name "*.cc" -o -name "*.cpp" \) -exec emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H -include "$JAGSTOP/config.h" $MODINC -I. -c {} \; 2>&1 | grep -E "error|Error" | head -3) || true
           done
-          { echo '#include <cstddef>'; echo "$GLUE"; echo 'namespace { struct JagsStaticInit { JagsStaticInit() {'; echo "$CALLS"; echo '} };'; echo 'JagsStaticInit _jags_static_init; }'; } > /tmp/static_modules.cc
-          cat /tmp/static_modules.cc
-          # compile the glue and append it to the link
-          emcc -std=gnu++20 -fPIC -Oz -DHAVE_CONFIG_H $MODINC -c /tmp/static_modules.cc -o /tmp/static_modules.o 2>&1 | tail -3 || true
+          MODOBJS=$(find /tmp/modbuild -name "*.o" 2>/dev/null | tr '\n' ' ')
+          echo "module objects: $(echo $MODOBJS | wc -w)"
+          # modules self-register: each module's entry .cc holds a static instance
+          # (jags::base::BaseModule _base_module;) whose constructor inserts it
+          # into the Console registry of the libjags.a also linked in this .so.
+          # Nothing extra to generate; skip the glue entirely.
           # append the module objects to the link
           # base/rngs' objects duplicate symbols already inside libjags.a — drop them
           # glm's objects pull BLAS/LAPACK symbols; importing them from R's
@@ -277,14 +257,6 @@ jobs:
           import sys
           p = '/tmp/rjags/src/Makevars'
           s = open(p).read()
-          # bugs/matrix + glm/SSparse define their own BLAS symbols (dtrmm_...,
-          # C signatures) that collide with the netlib libs embedded here —
-          # those live in the separately-loaded libbugsmatrix side module
-          # drop bugs/matrix.o (own BLAS C signatures collide with netlib) but
-          # KEEP glm/SSparse — its CHOLMOD symbols are needed by the GLM samplers
-          # bugs' sources call dtrmm_/dgemv_ through wrappers that live in
-          # bugs/matrix (excluded above) — link the prebuilt libbugsmatrix.a
-          # instead of every bugs .o that needs them
           objs = sys.argv[1].strip()
           libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
                   ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
@@ -294,15 +266,10 @@ jobs:
           out = []
           for line in s.splitlines():
               if line.startswith('PKG_LIBS'):
-                  line = 'PKG_LIBS = -Wl,--whole-archive ' + objs + ' ' + libs
+                  line = 'PKG_LIBS = ' + objs + ' ' + libs
               out.append(line)
-          out.append('')
-          out.append('# rjags is linked STATICALLY (modules inside): a side module never')
-          out.append('# resolves its symbols internally — R.wasm\'s dlopen then cannot')
-          out.append(("# load it (2418 unresolved imports). Override the side-module flag:"))
-          out.append('override WASM_LDFLAGS = -s MAIN_MODULE=2 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm')
           open(p, 'w').write('\n'.join(out) + '\n')
-          print('rewrote Makevars PKG_LIBS + LDFLAGS override')
+          print('rewrote Makevars PKG_LIBS')
           MVP
           grep "PKG_LIBS" src/Makevars | head -c 400; echo
           # ---------------------------------------------------------------------
@@ -311,10 +278,6 @@ jobs:
           # tarball name and capturing the .so directly (see patches/rjags-build.R)
           Rscript "$GITHUB_WORKSPACE/patches/rjags-build.R" 2>&1 | tail -60
           file /tmp/rjags-out/* 2>/dev/null || true
-          echo "=== Makevars final (PKG_LIBS/LDFLAGS/override) ==="
-          grep -E "PKG_LIBS|LDFLAGS|override" /tmp/rjags/src/Makevars | head -8
-          echo "=== rjags-out sizes ==="
-          ls -la /tmp/rjags-out/ 2>/dev/null || echo "rjags-out ABSENT"
           echo "=== modbuild tree (module objs) ==="
           for m in bugs dic glm lecuyer mix msm; do echo "$m: $(find /tmp/modbuild/$m -name '*.o' 2>/dev/null | wc -l)"; done
       - name: Phase 1 smoke test — library(rjags) inside WebR (Node)
