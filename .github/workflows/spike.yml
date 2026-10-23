@@ -229,7 +229,6 @@ jobs:
           # bugs' sources call dtrmm_/dgemv_ through wrappers that live in
           # bugs/matrix (excluded above) — link the prebuilt libbugsmatrix.a
           # instead of every bugs .o that needs them
-          objs = sys.argv[1].strip()
           libs = ('-Wl,--whole-archive /tmp/jags-wasm-install/lib/libjags.a'
                   ' /tmp/jags-wasm-install/lib/libjrmath.a -Wl,--no-whole-archive'
                   ' -L/tmp/jags-wasm-install/lib -lltdlc'
