@@ -249,10 +249,17 @@ jobs:
           # constructs the module class (Module's ctor inserts it into the
           # registry), and a glue .cc with its own static initializer calls
           # every factory when rjags.so is dlopened.
-          declare -A CLASSES=( [base]=BaseModule [bugs]=BugsModule [dic]=DicModule [glm]=GlmModule [lecuyer]=LecuyerModule [mix]=MixModule [msm]=MSMModule )
           GLUE=""; CALLS=""
           for m in base bugs dic glm lecuyer mix msm; do
-            C=${CLASSES[$m]}
+            case "$m" in
+              base) C=BaseModule ;;
+              bugs) C=BugsModule ;;
+              dic) C=DicModule ;;
+              glm) C=GlmModule ;;
+              lecuyer) C=LecuyerModule ;;
+              mix) C=MixModule ;;
+              msm) C=MSMModule ;;
+            esac
             printf '\nextern "C" void jags_static_make_%s() { static jags::%s::%s inst; }\n' "$m" "$m" "$C" >> "$MODSRC/$m/$m.cc"
             GLUE="$GLUE extern \"C\" void jags_static_make_$m();"
             CALLS="$CALLS jags_static_make_$m();"
