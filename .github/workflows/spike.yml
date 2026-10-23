@@ -253,10 +253,7 @@ jobs:
           GLUE=""; CALLS=""
           for m in base bugs dic glm lecuyer mix msm; do
             C=${CLASSES[$m]}
-            cat >> "$MODSRC/$m/$m.cc" <<EOF
-
-extern "C" void jags_static_make_$m() { static jags::$m::$C inst; }
-EOF
+            printf '\nextern "C" void jags_static_make_%s() { static jags::%s::%s inst; }\n' "$m" "$m" "$C" >> "$MODSRC/$m/$m.cc"
             GLUE="$GLUE extern \"C\" void jags_static_make_$m();"
             CALLS="$CALLS jags_static_make_$m();"
           done
