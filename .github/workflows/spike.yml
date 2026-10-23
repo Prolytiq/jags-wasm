@@ -193,7 +193,7 @@ jobs:
           const webR = new WebR();
           await webR.init();
           const shelter = await new webR.Shelter();
-          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', fs.readFileSync('$GITHUB_WORKSPACE/pkgs/rjags_4-16_prebuilt.tar.gz'.replace('$GITHUB_WORKSPACE', process.cwd())));
+          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', fs.readFileSync(process.env.GITHUB_WORKSPACE + '/pkgs/rjags_4-16_prebuilt.tar.gz'));
           await webR.evalR('dir.create("/tmp/jags-wasm-install/lib/jags/modules", recursive = TRUE)');
           for (const f of fs.readdirSync('/tmp/jags-wasm-install/lib/jags/modules')) {
             if (f.endsWith('.so')) {
