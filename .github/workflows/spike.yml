@@ -193,7 +193,7 @@ jobs:
           const webR = new WebR();
           await webR.init();
           const shelter = await new webR.Shelter();
-          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', fs.readFileSync('/tmp/rjags-out/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz'));
+          await webR.FS.writeFile('/tmp/rjags-bin.tar.gz', fs.readFileSync('$GITHUB_WORKSPACE/pkgs/rjags_4-16_prebuilt.tar.gz'.replace('$GITHUB_WORKSPACE', process.cwd())));
           await webR.evalR('dir.create("/tmp/jags-wasm-install/lib/jags/modules", recursive = TRUE)');
           for (const f of fs.readdirSync('/tmp/jags-wasm-install/lib/jags/modules')) {
             if (f.endsWith('.so')) {
@@ -313,7 +313,7 @@ jobs:
           V=_site/bin/emscripten/contrib/4.6
           sudo mkdir -p $V _site/modules
           # installed-tree tarballs, .tgz (webr's install_tgz format)
-          sudo cp pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz $V/rjags_4-16.tgz
+          sudo cp pkgs/rjags_4-16_prebuilt.tar.gz $V/rjags_4-16.tgz
           sudo cp pkgs/gemtc_1.1-2.tgz $V/gemtc_1.1-2.tgz
           sudo cp pkgs/Rglpk_0.6-5.1.tgz $V/Rglpk_0.6-5.1.tgz
           sudo chown -R $(id -u):$(id -g) _site
