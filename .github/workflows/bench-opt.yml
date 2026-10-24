@@ -1,0 +1,72 @@
+# A/B benchmark of the JAGS wasm stack: -Oz (current deployed flags) vs -O2 vs -O3.
+# Builds the WHOLE stack (BLAS/LAPACK, libjags, jrmath, 8 modules, rjags.so as a
+# SIDE_MODULE) per variant, then times toy + hierarchical MCMC in webr@0.6.0 on
+# ONE runner, interleaving variants across rounds. Fails unless every run MCMC_OKs.
+name: bench-opt
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/bench-opt.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        opt: [Oz, O2, O3]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/r-wasm/webr:main
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build stack (-${{ matrix.opt }})
+        run: bash scripts/build-stack.sh ${{ matrix.opt }} /tmp/stack-out/${{ matrix.opt }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stack-${{ matrix.opt }}
+          path: /tmp/stack-out/${{ matrix.opt }}/
+          if-no-files-found: error
+
+  bench:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stack-*
+          path: /tmp/stacks
+      - name: Arrange variants
+        run: |
+          set -euo pipefail
+          for d in /tmp/stacks/stack-*; do mv "$d" "/tmp/stacks/${d##*/stack-}"; done
+          ls -laR /tmp/stacks | head -60
+      - name: Install webr@0.6.0
+        run: cd /tmp && npm init -y >/dev/null && npm install webr@0.6.0 >/dev/null
+      - name: Benchmark (3 interleaved rounds, rotated order)
+        run: |
+          set -euo pipefail
+          cp tests/bench.mjs tests/bench-summary.mjs /tmp/
+          : > /tmp/bench.log
+          for round in 1 2 3; do
+            case $round in 1) order="Oz O2 O3";; 2) order="O3 Oz O2";; 3) order="O2 O3 Oz";; esac
+            for v in $order; do
+              node /tmp/bench.mjs "$v" "/tmp/stacks/$v/rjags_4-16.tgz" "/tmp/stacks/$v/modules" 1 2>&1 | tee -a /tmp/bench.log
+            done
+          done
+          node /tmp/bench-summary.mjs /tmp/stacks < /tmp/bench.log | tee /tmp/bench-summary.md
+          cat /tmp/bench-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-results
+          path: |
+            /tmp/bench.log
+            /tmp/bench-summary.md
