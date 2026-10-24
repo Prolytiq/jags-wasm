@@ -53,7 +53,12 @@ emar d /tmp/lapack-wasm/lib/liblapack.a lsame.o xerbla.o xerbla_array.o 2>/dev/n
 curl -fsSL --retry 3 -o /tmp/jags.tar.gz \
   "https://downloads.sourceforge.net/project/mcmc-jags/JAGS/4.x/Source/JAGS-4.3.1.tar.gz"
 tar xzf /tmp/jags.tar.gz -C /tmp
-cp /usr/share/misc/config.sub /usr/share/misc/config.guess /tmp/JAGS-4.3.1/
+if [ -f /usr/share/misc/config.sub ]; then
+  cp /usr/share/misc/config.sub /usr/share/misc/config.guess /tmp/JAGS-4.3.1/
+else
+  curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.sub "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.sub"
+  curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.guess "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.guess"
+fi
 grep -q emscripten /tmp/JAGS-4.3.1/config.sub
 patch -p1 -d /tmp < "$HERE/patches/disttab-cxx17.patch"
 find /tmp/JAGS-4.3.1/src \( -name "*.cc" -o -name "*.h" -o -name "*.cpp" \) | while read -r f; do
