@@ -9,6 +9,9 @@ on:
     branches: [main]
     paths:
       - .github/workflows/bench-opt.yml
+      - scripts/build-stack.sh
+      - patches/rjags-build.R
+      - tests/bench*.mjs
 
 permissions:
   contents: read

@@ -77,8 +77,11 @@ export CC="$(val CC)" CXX="$(val CXX)" AR="$(val AR)" RANLIB="$(val RANLIB)"
 export F77="$FL" FC="$FL" FLIBS="$(val FLIBS)"
 export CFLAGS="$(val CFLAGS | setopt) -fPIC"
 export CXXFLAGS="$(val CXXFLAGS | setopt) -fPIC"
-export FFLAGS="$(val FFLAGS) $F_OPT -fwasm-exceptions -fPIC"
-export FCFLAGS="$(val FCFLAGS) $F_OPT -fwasm-exceptions -fPIC"
+# no -fwasm-exceptions for flang (configure's Fortran probe fails with it);
+# matches spike.yml, whose final FFLAGS are Makeconf FFLAGS + -fPIC
+fsetopt() { if [ "$BASELINE" = 1 ]; then cat; else strip_opt | sed "s/\$/ $F_OPT/"; fi; }
+export FFLAGS="$(val FFLAGS | fsetopt) -fPIC"
+export FCFLAGS="$(val FCFLAGS | fsetopt) -fPIC"
 export LDFLAGS="$(val LDFLAGS)"
 echo "### Makeconf CFLAGS='$(val CFLAGS)' CXXFLAGS='$(val CXXFLAGS)'"
 echo "### effective CFLAGS='$CFLAGS' CXXFLAGS='$CXXFLAGS' FFLAGS='$FFLAGS'"
