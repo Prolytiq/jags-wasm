@@ -78,6 +78,24 @@ print(round(s$summaries$statistics["sd.d", c("Mean", "SD")], 3))`)
     const dA = Object.entries(E2E.values.d_means).filter(([n]) => n.startsWith('d.A.'))
     check(dA.length >= 1 && dA.every(([, v]) => v > 0), 'd.A.* > 0 (active treatments vs no contact), as in the published analysis')
 
+    // 2b. A second mtc.run, then drop the first fit and its model and gc(): the JAGS model
+    // finalizer runs here (the jags-wasm 'function signature mismatch' trap was on this path)
+    const gcRun = await run('mtc.run #2 + gc()', `set.seed(99)
+res2 <- mtc.run(model, n.adapt = 500, n.iter = 2000)
+d2 <- summary(res2)$summaries$statistics[grep("^d\\\\.", rownames(summary(res2)$summaries$statistics)), "Mean"]
+print(round(d2, 3))
+res_old <- mtc.run(model, n.adapt = 100, n.iter = 200)
+rm(res_old)
+invisible(gc())
+invisible(gc())
+cat("gc after dropping a fitted JAGS model: OK\\n")`)
+    check(!gcRun.failed && gcRun.lines.some((l) => /gc after dropping a fitted JAGS model: OK/.test(l.text)), 'second mtc.run + rm(fit) + gc() ran without a trap')
+    const d2 = await rNum('d2')
+    check(d2.values.length === means.values.length && d2.values.every((v, i) => Math.abs(v - means.values[i]) < 0.3),
+      'second mtc.run posterior means agree with the first (|diff| < 0.3)')
+    const after = await run('JAGS after gc()', 'res3 <- mtc.run(model, n.adapt = 100, n.iter = 500)\nprint(round(summary(res3)$summaries$statistics[1:3, "Mean"], 3))')
+    check(!after.failed, 'JAGS still samples after the gc() that ran the model finalizers')
+
     // 3. Chunked MCMC with progress (R_BOOTSTRAP tools)
     const prog = await run('jags.samples.progressive', `set.seed(7)
 y <- rnorm(50, 1.5, 1)
