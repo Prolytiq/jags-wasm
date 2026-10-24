@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the whole JAGS wasm stack at one optimisation level, inside
 # ghcr.io/r-wasm/webr:main:
-#   netlib BLAS/LAPACK -> libjags.a + libjrmath.a -> 8 modules (SIDE_MODULE .so)
+#   netlib BLAS/LAPACK -> libjags.a + libjrmath.a -> 7 modules (SIDE_MODULE .so)
 #   -> rjags.so (SIDE_MODULE, libjags whole-archived, default visibility)
 #   -> installed-tree tarball rjags_4-16.tgz (R code with a real .onLoad)
 #
@@ -107,7 +107,9 @@ for a in src/modules/*/.libs/lib*.a; do
     -o "$P/lib/jags/modules/${n}.so"
 done
 NMOD=$(ls $P/lib/jags/modules/*.so | wc -l)
-echo "### modules built: $NMOD"; [ "$NMOD" -ge 8 ]
+echo "### modules built: $NMOD"
+# production ships exactly these 7 (JAGS 4.3.1 has 7 module dirs)
+for m in basemod bugs dic glm lecuyer mix msm; do test -s "$P/lib/jags/modules/lib$m.so"; done
 
 # ---------------------------------------------------------------- rjags.so (SIDE_MODULE)
 Rscript -e 'if (!requireNamespace("rwasm", quietly = TRUE)) install.packages("rwasm", repos = c("https://r-wasm.r-universe.dev", "https://cran.r-project.org"))' 2>&1 | tail -2
