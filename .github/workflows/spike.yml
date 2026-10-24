@@ -2,8 +2,20 @@
 # gemtc + Rglpk) to GitHub Pages. Deploys only if the MCMC smoke/regression passes.
 name: jags-wasm-spike
 on:
-  push: { branches: [main] }
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'reports/**'
+      - 'tests/browser/**'
+      - '.github/workflows/bench-opt.yml'
   workflow_dispatch: {}
+
+# one production deploy at a time, in push order (an older run finishing last
+# would otherwise overwrite Pages with a stale build)
+concurrency:
+  group: jags-wasm-production
+  cancel-in-progress: false
 
 permissions:
   contents: read

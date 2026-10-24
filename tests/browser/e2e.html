@@ -1,0 +1,173 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>jags-wasm e2e</title></head>
+<body><pre id="log"></pre>
+<script type="module">
+// Browser e2e for the Prolytiq JAGS stack. Runs the PRODUCTION session code
+// (app-bundle.js, bundled from fts-app src/lib/biostatistics by build-bundle.mjs)
+// on WebR 0.6.0 booted the way useWebR.ts boots it. Phases (?phase=...):
+//   journey    - library(gemtc) through runCode's auto-install, NMA, progressive MCMC, save_workspace
+//   restore    - a fresh page (same browser profile): restoreWorkspaceIfSaved from IndexedDB
+//   dependents - ?pkg=X: library(X) for a CRAN package that Depends/Imports rjags
+// Results land in window.__E2E = { done, failures, timings, values } for the driver.
+const params = new URLSearchParams(location.search)
+const phase = params.get('phase') || 'journey'
+const KEY = 'e2e-script'
+const E2E = (window.__E2E = { phase, done: false, failures: [], timings: {}, values: {} })
+const el = document.getElementById('log')
+const log = (s) => { el.textContent += s + '\n'; console.log(s) }
+const fail = (msg) => { E2E.failures.push(msg); log('ASSERT FAIL: ' + msg) }
+const check = (cond, msg) => { if (cond) log('ASSERT OK: ' + msg); else fail(msg) }
+const t0 = performance.now()
+const timed = async (name, fn) => {
+  const s = performance.now()
+  try { return await fn() } finally {
+    const ms = Math.round(performance.now() - s); E2E.timings[name] = ms; log(`TIMING ${name}: ${(ms / 1000).toFixed(1)} s`)
+  }
+}
+const printLines = (lines) => { for (const l of lines) log(`  [${l.kind}] ${l.text.replace(/\n$/, '')}`) }
+
+try {
+  const app = await import('./app-bundle.js')
+  const { WebR } = await import('./webr.js')
+  // useWebR.ts: new WebR({ baseUrl, interactive: false }); init(); evalRVoid(R_BOOTSTRAP); new Shelter()
+  const webR = new WebR({ baseUrl: new URL('./', location.href).href, interactive: false })
+  await timed('boot', async () => { await webR.init(); await webR.evalRVoid(app.R_BOOTSTRAP) })
+  const shelter = await new webR.Shelter()
+  const run = async (name, code) => {
+    log(`--- runCode: ${name}`)
+    const r = await timed(name, () => app.runCode(webR, shelter, code))
+    printLines(r.lines)
+    return r
+  }
+  const rNum = async (code) => {
+    const js = await (await shelter.evalR(code)).toJs()
+    await shelter.purge()
+    return { names: js.names ?? null, values: (js.values ?? []).map(Number) }
+  }
+
+  if (phase === 'journey') {
+    // 1. The user's first line: runCode sees "no package called 'gemtc'" and installs the stack
+    const lib = await run('install+library(gemtc)', 'library(gemtc)')
+    check(!lib.failed, 'library(gemtc) succeeded through the production auto-install')
+    const loaded = await rNum('as.numeric(c(rjags = "rjags" %in% loadedNamespaces(), gemtc = "gemtc" %in% loadedNamespaces()))')
+    check(loaded.values.every((v) => v === 1), 'rjags and gemtc namespaces are loaded')
+    const mods = await run('list.modules', 'rjags::list.modules()')
+    check(mods.lines.some((l) => /basemod/.test(l.text) && /bugs/.test(l.text)), 'JAGS modules basemod + bugs are loaded')
+
+    // 2. A small NMA (smoking cessation, 4 treatments, 24 studies)
+    const nma = await run('mtc.run', `data(smoking)
+network <- if (inherits(smoking, "mtc.network")) smoking else mtc.network(smoking$data.ab, treatments = smoking$treatments)
+model <- mtc.model(network, linearModel = "random", n.chain = 2)
+set.seed(20261024)
+res <- mtc.run(model, n.adapt = 500, n.iter = 2000)
+s <- summary(res)
+d_stats <- s$summaries$statistics[grep("^d\\\\.", rownames(s$summaries$statistics)), c("Mean", "SD"), drop = FALSE]
+print(round(d_stats, 3))
+print(round(s$summaries$statistics["sd.d", c("Mean", "SD")], 3))`)
+    check(!nma.failed, 'mtc.run + summary(res) ran without error')
+    const means = await rNum('d_stats[, "Mean"]')
+    const sds = await rNum('d_stats[, "SD"]')
+    E2E.values.d_means = Object.fromEntries((means.names ?? []).map((n, i) => [n, means.values[i]]))
+    log('d.* posterior means: ' + JSON.stringify(E2E.values.d_means))
+    check(means.values.length >= 3, `>= 3 basic parameters d.* (got ${means.values.length})`)
+    check(means.values.every(Number.isFinite) && sds.values.every(Number.isFinite), 'every d.* mean and SD is finite')
+    check(sds.values.every((v) => v > 0), 'every d.* posterior SD is > 0 (the chain moved)')
+    check(means.values.every((v) => Math.abs(v) < 3), 'every d.* mean is a plausible log odds ratio (|d| < 3)')
+    // Published smoking NMA (Hasselblad 1998 / gemtc vignette): all active treatments beat
+    // "no contact" (A) on the log-odds scale, so d.A.* > 0 on average.
+    const dA = Object.entries(E2E.values.d_means).filter(([n]) => n.startsWith('d.A.'))
+    check(dA.length >= 1 && dA.every(([, v]) => v > 0), 'd.A.* > 0 (active treatments vs no contact), as in the published analysis')
+
+    // 3. Chunked MCMC with progress (R_BOOTSTRAP tools)
+    const prog = await run('jags.samples.progressive', `set.seed(7)
+y <- rnorm(50, 1.5, 1)
+m <- rjags::jags.model(textConnection("model {
+  for (i in 1:N) { y[i] ~ dnorm(mu, 1) }
+  mu ~ dnorm(0, 0.001)
+}"), data = list(y = y, N = 50), n.chains = 2, quiet = TRUE)
+calls <- 0
+smp <- jags.samples.progressive(m, "mu", 4000, chunk = 1000, progress = function(pct, iter) calls <<- calls + 1)
+print(c(niter = coda::niter(smp), nchain = coda::nchain(smp), calls = calls, mu = round(mean(as.matrix(smp)), 3)))`)
+    check(!prog.failed, 'jags.samples.progressive ran without error')
+    const chunkLines = prog.lines.filter((l) => l.kind === 'system' && /^Chunk \d+\/4 /.test(l.text))
+    check(chunkLines.length === 4, `4 chunk progress lines rendered as system lines (got ${chunkLines.length})`)
+    const pv = await rNum('c(coda::niter(smp), coda::nchain(smp), calls, mean(as.matrix(smp)), unlist(getOption("prolytiq.state")$jags.progress))')
+    check(pv.values[0] === 4000 && pv.values[1] === 2, 'merged mcmc.list has 4000 iterations x 2 chains')
+    check(pv.values[2] === 4, 'progress callback called once per chunk')
+    check(Math.abs(pv.values[3] - 1.5) < 0.5, `posterior mean of mu near the true 1.5 (got ${pv.values[3]})`)
+    check(pv.values[4] === 4000 && pv.values[5] === 4000, 'state$jags.progress == c(4000, 4000) for the JS side to poll')
+
+    // 4. Workspace: save_workspace() in R, then the app's persistWorkspace -> IndexedDB
+    const save = await run('save_workspace', 'd_means <- d_stats[, "Mean"]\nsave_workspace()')
+    check(!save.failed, 'save_workspace() ran without error')
+    const persisted = await timed('persistWorkspace', () => app.persistWorkspace(webR, shelter, KEY, app.indexedDbWorkspaceStorage))
+    log('persistWorkspace -> ' + persisted)
+    check(typeof persisted === 'string' && /Workspace saved locally/.test(persisted), 'persistWorkspace stored the RDS in IndexedDB')
+    // R-side round trip on the VFS, same session
+    const rt = await run('load_workspace round-trip', 'saved <- d_means\nrm(d_means)\nload_workspace()\nprint(identical(saved, d_means))')
+    check(!rt.failed && rt.lines.some((l) => /\[1\] TRUE/.test(l.text)), 'load_workspace() restores d_means identically (VFS round trip)')
+    localStorage.setItem('e2e.d_means', JSON.stringify(E2E.values.d_means))
+  }
+
+  if (phase === 'restore') {
+    // The page was reloaded: the VFS is gone, IndexedDB is not. BiostatisticsWorkspace.tsx
+    // calls restoreWorkspaceIfSaved(session.webR, session.shelter, key, indexedDbWorkspaceStorage).
+    const snap = await app.indexedDbWorkspaceStorage.get(KEY)
+    log(`IndexedDB snapshot for ${KEY}: ${snap ? snap.bytes.length + ' bytes' : 'none'}`)
+    check(!!snap && snap.bytes.length > 0, 'the snapshot saved by the journey phase survived the reload in IndexedDB')
+    const restored = await timed('restoreWorkspaceIfSaved', () => app.restoreWorkspaceIfSaved(webR, shelter, KEY, app.indexedDbWorkspaceStorage))
+    log('restoreWorkspaceIfSaved -> ' + restored)
+    check(typeof restored === 'string' && /^Restored \d+ object/.test(restored), 'restoreWorkspaceIfSaved restored the objects')
+    const expected = JSON.parse(localStorage.getItem('e2e.d_means') || '{}')
+    const got = await run('restored objects', 'print(exists("d_means")); if (exists("d_means")) print(d_means)')
+    const dm = await rNum('if (exists("d_means")) d_means else numeric(0)')
+    const same = Object.keys(expected).length > 0 && (dm.names ?? []).length === Object.keys(expected).length &&
+      (dm.names ?? []).every((n, i) => expected[n] === dm.values[i])
+    check(!got.failed && same, 'd_means after the reload equals the saved values')
+    // The restored mtc.result is usable once gemtc is back (installed again on demand)
+    const again = await run('summary(res) after restore', 'library(gemtc)\nprint(round(summary(res)$summaries$statistics[1:3, "Mean"], 3))')
+    check(!again.failed, 'summary(res) on the restored mtc.result works after library(gemtc)')
+  }
+
+  if (phase === 'binomial') {
+    // Standard 20-study binomial random-effects meta-analysis (dbin + logit + dnorm/dunif), 3 chains
+    const lib = await run('install+library(rjags)', 'library(rjags)')
+    check(!lib.failed, 'library(rjags) succeeded through the production auto-install')
+    const re = await run('binomial RE 3 chains', `set.seed(11)
+k <- 20; n1 <- rep(100, k); n0 <- rep(100, k)
+theta <- rnorm(k, -0.5, 0.3); base <- rnorm(k, -1, 0.5)
+r0 <- rbinom(k, n0, plogis(base)); r1 <- rbinom(k, n1, plogis(base + theta))
+re_model <- "model {
+  for (i in 1:k) {
+    r0[i] ~ dbin(p0[i], n0[i]); r1[i] ~ dbin(p1[i], n1[i])
+    logit(p0[i]) <- mu[i]; logit(p1[i]) <- mu[i] + delta[i]
+    mu[i] ~ dnorm(0, 1.0E-4); delta[i] ~ dnorm(d, prec)
+  }
+  d ~ dnorm(0, 1.0E-4); tau ~ dunif(0, 5); prec <- 1 / pow(tau, 2)
+}"
+jm <- jags.model(textConnection(re_model), data = list(k = k, r0 = r0, r1 = r1, n0 = n0, n1 = n1), n.chains = 3, quiet = TRUE)
+update(jm, 500)
+bs <- coda.samples(jm, c("d", "tau"), n.iter = 2000)
+print(round(summary(bs)$statistics[, c("Mean", "SD")], 3))`)
+    check(!re.failed, 'binomial random-effects model (3 chains) sampled without error')
+    const v = await rNum('if (exists("bs")) summary(bs)$statistics[, "Mean"] else numeric(0)')
+    E2E.values.binomial = Object.fromEntries((v.names ?? []).map((n, i) => [n, v.values[i]]))
+    check(v.values.length === 2 && Math.abs(v.values[0] + 0.5) < 0.3, `posterior mean of d near the true -0.5 (got ${v.values[0]})`)
+  }
+
+  if (phase === 'dependents') {
+    const pkg = params.get('pkg') || 'bayesmix'
+    const dep = await run(`library(${pkg})`, `library(${pkg})`)
+    check(!dep.failed, `library(${pkg}) (a package that Depends/Imports rjags) succeeded through runCode`)
+    const ns = await rNum(`as.numeric(c("${pkg}" %in% loadedNamespaces(), "rjags" %in% loadedNamespaces()))`)
+    check(ns.values.every((v) => v === 1), `${pkg} and rjags namespaces are loaded`)
+    const mods = await run('list.modules', 'rjags::list.modules()')
+    check(mods.lines.some((l) => /basemod/.test(l.text)), 'JAGS modules were fetched in the dependents path')
+  }
+} catch (e) {
+  fail('unexpected exception: ' + (e && (e.stack || e.message) || String(e)))
+}
+E2E.timings.total = Math.round(performance.now() - t0)
+log(`PHASE ${phase} DONE: ${E2E.failures.length === 0 ? 'PASS' : 'FAIL (' + E2E.failures.length + ')'} in ${(E2E.timings.total / 1000).toFixed(1)} s`)
+E2E.done = true
+</script></body></html>

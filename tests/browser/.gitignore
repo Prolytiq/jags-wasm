@@ -1,0 +1,11 @@
+# copied from fts-app node_modules/webr/dist / generated per run
+webr.js
+webr-worker.js
+R.js
+R.wasm
+libRblas.so
+libRlapack.so
+vfs/
+app-entry.ts
+app-bundle.js
+e2e-run.log
