@@ -11,6 +11,7 @@ on:
       - .github/workflows/bench-opt.yml
       - scripts/build-stack.sh
       - patches/rjags-build.R
+      - patches/fortran-hidden-lengths.py
       - tests/bench*.mjs
 
 permissions:

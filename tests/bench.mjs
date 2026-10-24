@@ -90,4 +90,48 @@ for (let rep = 1; rep <= reps; rep++) {
     console.log('BENCH_JSON ' + JSON.stringify({ variant: label, test: name, rep, ms, ok, result }));
   }
 }
+// (c) regression, untimed, must pass: every path that crashed the R process
+// under wasm before the finalizer + Fortran hidden-length fixes —
+// gc() after a model is dropped (rjags C finalizer), dmnorm/dwish/inverse/%*%
+// (bugs LAPACK/BLAS), the conjugate multivariate normal sampler, and a glm
+// module logistic regression (glm samplers / CHOLMOD).
+const REGRESS = `r <- tryCatch({
+  set.seed(2)
+  m0 <- jags.model(textConnection("model { y ~ dnorm(0,1) }"), n.chains = 1, quiet = TRUE)
+  rm(m0); invisible(gc()); cat("GC_OK\\n")
+  mv <- "model {
+    for (i in 1:N) { yv[i, 1:2] ~ dmnorm(mu[], Om[, ]) }
+    mu[1:2] ~ dmnorm(zero[], I2[, ])
+    Om[1:2, 1:2] ~ dwish(I2[, ], 3)
+    S <- inverse(Om)
+    z[1:2] <- Om %*% mu
+  }"
+  yv <- cbind(rnorm(30, 1), rnorm(30, -1))
+  m <- jags.model(textConnection(mv), data = list(N = 30, yv = yv, zero = c(0, 0), I2 = diag(2)),
+                  n.chains = 2, quiet = TRUE)
+  update(m, 500, progress.bar = "none")
+  s <- jags.samples(m, c("mu", "S", "z"), 2000, progress.bar = "none")
+  stopifnot(all(is.finite(s$mu)), all(is.finite(s$S)), all(is.finite(s$z)))
+  mu_hat <- apply(s$mu, 1, mean)
+  stopifnot(abs(mu_hat[1] - 1) < 0.6, abs(mu_hat[2] + 1) < 0.6)
+  cat("MVN_OK mu=", sprintf("%.3f", mu_hat), "\\n")
+  load.module("glm", quiet = TRUE)
+  x <- seq(-2, 2, length.out = 80); yb <- rbinom(80, 1, plogis(0.5 + 1.5 * x))
+  mg <- jags.model(textConnection("model { for (i in 1:N) { y[i] ~ dbern(p[i]); logit(p[i]) <- b0 + b1 * x[i] }
+    b0 ~ dnorm(0, 0.01); b1 ~ dnorm(0, 0.01) }"), data = list(N = 80, x = x, y = yb), n.chains = 2, quiet = TRUE)
+  update(mg, 500, progress.bar = "none")
+  sg <- jags.samples(mg, c("b0", "b1"), 2000, progress.bar = "none")
+  stopifnot(is.finite(mean(sg$b1)), mean(sg$b1) > 0)
+  cat("GLM_OK samplers:", paste(unique(names(list.samplers(mg))), collapse = ","), " b1=", sprintf("%.3f", mean(sg$b1)), "\\n")
+  rm(m, mg); invisible(gc()); cat("GC2_OK\\n")
+  cat("RESULT", sprintf("mu1=%.3f mu2=%.3f b1=%.3f", mu_hat[1], mu_hat[2], mean(sg$b1)), "\\n")
+  "MCMC_OK"
+}, error = function(e) paste("ERROR:", conditionMessage(e))); cat(r, "\\n")`;
+{
+  const text = await capture(REGRESS);
+  const ok = /MCMC_OK/.test(text) && /GC_OK/.test(text) && /GC2_OK/.test(text);
+  if (!ok) failed = true;
+  console.log(`[${label}] regress: ${ok ? 'MCMC_OK' : 'MCMC_FAIL'}`);
+  console.log(text);
+}
 process.exit(failed ? 1 : 0);

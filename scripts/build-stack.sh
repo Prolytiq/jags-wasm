@@ -66,6 +66,9 @@ find /tmp/JAGS-4.3.1/src \( -name "*.cc" -o -name "*.h" -o -name "*.cpp" \) | wh
   perl -0pi -e 's/: public binary_function<[^>]*>//g' "$f"
   perl -pi -e 's/bind2nd\((\w+\(\)), /std::bind($1, std::placeholders::_1, /g' "$f"
 done
+# flang BLAS/LAPACK take hidden CHARACTER lengths; JAGS's prototypes don't
+# (wasm-ld turns every such call into a trap stub). See the script header.
+python3 "$HERE/patches/fortran-hidden-lengths.py" /tmp/JAGS-4.3.1
 
 # ---------------------------------------------------------------- configure
 cd /tmp/JAGS-4.3.1
@@ -100,12 +103,17 @@ rm -rf $P && mkdir -p $P/lib/jags/modules $P/include
 cp -r src/include/* $P/include/
 cp src/lib/.libs/libjags.a src/jrmath/.libs/libjrmath.a $P/lib/
 find libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \;
+rm -f /tmp/module-link.log
 for a in src/modules/*/.libs/lib*.a; do
   n=$(basename "$a" .a)
   em++ -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm $L_OPT \
     -Wl,--whole-archive "$a" /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a /opt/flang/wasm/lib/libFortranRuntime.a -Wl,--no-whole-archive \
-    -o "$P/lib/jags/modules/${n}.so"
+    -o "$P/lib/jags/modules/${n}.so" 2>&1 | tee -a /tmp/module-link.log
 done
+# a signature mismatch is a runtime trap under wasm, never a harmless warning
+if grep -A2 "signature mismatch" /tmp/module-link.log; then
+  echo "### FAIL: BLAS/LAPACK signature mismatches remain in the module links"; exit 1
+fi
 NMOD=$(ls $P/lib/jags/modules/*.so | wc -l)
 echo "### modules built: $NMOD"
 # production ships exactly these 7 (JAGS 4.3.1 has 7 module dirs)
@@ -119,12 +127,21 @@ rm -rf /tmp/rjags && tar xzf /tmp/rjags.tar.gz -C /tmp
 cd /tmp/rjags
 rm -f configure configure.ac configure.in configure.win cleanup
 sed "s|@JAGS_MODDIR@|$P/lib/jags/modules|" R/unix/zzz.R.in > R/unix/zzz.R
+# rjags registers `SEXP clear_console(SEXP)` as a C finalizer through a cast to
+# `void (*)(SEXP)`. Harmless natively; under wasm call_indirect checks the
+# signature, so the first gc() after a jags model is dropped kills R
+# ("function signature mismatch"). Register a void wrapper instead.
+perl -0pi -e 's/(\n\s*SEXP make_console\(\))/\n    static void clear_console_finalizer(SEXP s) { clear_console(s); }\n$1/; s/\(R_CFinalizer_t\) clear_console\b/clear_console_finalizer/' src/jags.cc
+grep -q "R_RegisterCFinalizer(ptr, clear_console_finalizer)" src/jags.cc
+if grep -n "(R_CFinalizer_t)" src/*.cc; then echo "### FAIL: unpatched finalizer cast"; exit 1; fi
 cat > src/Makevars <<MKV
 PKG_CPPFLAGS = -I$P/include
 PKG_LIBS = -Wl,--whole-archive $P/lib/libjags.a $P/lib/libjrmath.a -Wl,--no-whole-archive -L$P/lib -lltdlc /opt/flang/wasm/lib/libFortranRuntime.a
 MKV
 cd /tmp && tar czf rjags-mod.tar.gz rjags
-RJAGS_OPT="$OPT" Rscript "$HERE/patches/rjags-build.R" 2>&1 | tail -40
+RJAGS_OPT="$OPT" Rscript "$HERE/patches/rjags-build.R" > /tmp/rjags-build.log 2>&1 || { tail -60 /tmp/rjags-build.log; exit 1; }
+tail -40 /tmp/rjags-build.log
+if grep -A2 "signature mismatch" /tmp/rjags-build.log; then echo "### FAIL: signature mismatch in the rjags.so link"; exit 1; fi
 LIBDIR=$(cat /tmp/rjags-out/libdir)
 test -f "$LIBDIR/rjags/libs/rjags.so"
 Rscript -e "e <- new.env(); lazyLoad('$LIBDIR/rjags/R/rjags', envir = e); stopifnot(is.function(e\$.onLoad))"
