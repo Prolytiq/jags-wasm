@@ -119,3 +119,11 @@ The same e2e run against `origin/main` (051a3a96) fails as follows:
 The whole TS path ran unmodified in the browser: `save_workspace()` (R),
 `persistWorkspace` to the real IndexedDB (`prolytiq-webr`/`workspaces`), a page
 reload, `restoreWorkspaceIfSaved`, and `load_workspace` (R). Nothing was stubbed.
+
+## Update: rjags dependents went live on r-wasm-pkgs during the session
+
+Once altmeta, pcnetmeta, crossnma and BayesCACE appeared in r-wasm-pkgs PACKAGES, each one got
+`node tests/browser/e2e-gemtc.mjs --phases dependents --pkg <name>` on PR #1033's code. All of
+them PASS: `library(<pkg>)` goes through runCode's auto-install, the pkg and rjags namespaces are
+loaded, and the JAGS modules are fetched. Times on a fresh profile: altmeta 20.8 s, pcnetmeta
+7.3 s, crossnma 44.6 s, BayesCACE 13.8 s.
