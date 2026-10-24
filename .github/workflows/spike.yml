@@ -1,5 +1,5 @@
-# Phase 0/1 spike: JAGS cross-compiles to wasm (Phase 0 DONE — libjags.a + 8 modules);
-# Phase 1 attempts the rjags R package build against the prefix.
+# Production build + deploy of the JAGS wasm stack (rjags + 7 JAGS modules +
+# gemtc + Rglpk) to GitHub Pages. Deploys only if the MCMC smoke/regression passes.
 name: jags-wasm-spike
 on:
   push: { branches: [main] }
@@ -15,239 +15,46 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/r-wasm/webr:main
+    env:
+      # optimisation level of the whole stack (scripts/build-stack.sh); Oz is
+      # the smallest download. Only change it on a bench-opt result >= 10%.
+      STACK_OPT: Oz
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Toolchain probe
-        run: |
-          which emcc em++ node
-          emcc --version | head -1
-          echo "=== fortran compilers anywhere ==="
-          find / -maxdepth 4 \( -iname "*flang*" -o -iname "f77" -o -iname "gfortran*" \) 2>/dev/null | grep -v proc | head -30
-          echo "=== /opt tree ==="
-          ls /opt; ls /opt/webr 2>/dev/null; ls /opt/webr/wasm 2>/dev/null
-          which flang-new || true
-          # find the wasm R's Makeconf and print its toolchain lines (source of truth)
-          MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
-          echo "Makeconf: $MC"
-          echo "=== wasm R libs (blas/lapack candidates) ==="
-          find /opt/webr/wasm -name "libRlapack*" -o -name "libRblas*" 2>/dev/null | head -10
-          grep -E "^(CC|CXX|FC|F77|FLIBS|CFLAGS|CXXFLAGS|FCFLAGS|FFLAGS|LDFLAGS|CPPFLAGS|DYLIB_LD|MAIN_LD|SHLIB_LD) *=" "$MC" || true
-      - name: Build netlib BLAS+LAPACK static for wasm
+      # One recipe for production and the benchmark: netlib BLAS/LAPACK ->
+      # libjags + jrmath -> 7 module SIDE_MODULEs -> rjags.so (SIDE_MODULE, built
+      # from the CRAN source with the finalizer patch, zzz.R .onLoad) -> the
+      # installed-tree tarball. It fails on any wasm signature mismatch.
+      # rjags.so stays a SIDE_MODULE; never MAIN_MODULE, never dyn.load it by hand.
+      - name: Build the JAGS stack
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/blas.tgz "https://netlib.org/blas/blas.tgz"
-          curl -fsSL -o /tmp/lapackgh.tgz "https://github.com/Reference-LAPACK/lapack/archive/refs/tags/v3.12.0.tar.gz"
-          tar xzf /tmp/blas.tgz -C /tmp && tar xzf /tmp/lapackgh.tgz -C /tmp
-          FL=/opt/flang/host/bin/flang
-          FFLAGS="-O2 --target=wasm32-unknown-emscripten -fPIC"
-          AR=emar RANLIB=emranlib
-          # BLAS: pure Fortran sources -> static archive
-          cd /tmp/BLAS-3.12.0
-          $FL $FFLAGS -c *.f
-          emar cr libblas.a *.o && emranlib libblas.a
-          # LAPACK: plain make (cmake chokes on enable_language(Fortran) cross-compiling)
-          cd /tmp/lapack-3.12.0
-          cp make.inc.example make.inc
-          sed -i 's|^FC  *= .*|FC = /opt/flang/host/bin/flang|; s|^FFLAGS  *= .*|FFLAGS = -O2 --target=wasm32-unknown-emscripten -fPIC|; s|^FFLAGS_NOOPT  *= .*|FFLAGS_NOOPT = -O0 --target=wasm32-unknown-emscripten -fPIC|; s|^LOADER   *= .*|LOADER = /opt/flang/host/bin/flang|; s|^ARCH     *= .*|ARCH = emar|; s|^RANLIB   *= .*|RANLIB = emranlib|' make.inc
-          make lapacklib -j2 2>&1 | tail -5
-          cp liblapack.a /tmp/lapack-wasm-liblapack.a
-          mkdir -p /tmp/lapack-wasm/lib
-          mv /tmp/lapack-wasm-liblapack.a /tmp/lapack-wasm/lib/liblapack.a
-          ls -la /tmp/lapack-wasm/lib /tmp/BLAS-3.12.0/libblas.a
-      - name: Inspect webr flang tooling
-        run: |
-          echo "=== /opt/flang ==="; ls -la /opt/flang 2>/dev/null || echo absent
-          echo "=== fortran-flang.mk ==="; head -60 /opt/webr/tools/fortran-flang.mk 2>/dev/null
-          echo "=== tools dir ==="; ls /opt/webr/tools 2>/dev/null
-          echo "=== Makefile targets ==="; grep -E "^[a-z-]+:" /opt/webr/Makefile | head -20
-      - name: Download JAGS source
-        run: |
-          set -euo pipefail
-          curl -fsSL -o /tmp/jags.tar.gz \
-            "https://downloads.sourceforge.net/project/mcmc-jags/JAGS/4.x/Source/JAGS-4.3.1.tar.gz"
-          tar xzf /tmp/jags.tar.gz -C /tmp
-      - name: Refresh autotools config (recognize wasm32-unknown-emscripten)
-        run: |
-          set -euo pipefail
-          # local autoconf copy first (no network flakiness); GNU savannah as fallback
-          if [ -f /usr/share/misc/config.sub ]; then
-            cp /usr/share/misc/config.sub /tmp/JAGS-4.3.1/config.sub
-            cp /usr/share/misc/config.guess /tmp/JAGS-4.3.1/config.guess
-          else
-            curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.sub "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.sub"
-            curl -fsSL --retry 3 -o /tmp/JAGS-4.3.1/config.guess "https://raw.githubusercontent.com/gcc-mirror/gcc/master/config.guess"
-          fi
-          grep -q emscripten /tmp/JAGS-4.3.1/config.sub || { echo "config.sub still does not know emscripten"; exit 1; }
-      - name: Patch JAGS for C++17 (std::binary_function/bind2nd removed in C++17)
-        run: patch -p1 -d /tmp < "$GITHUB_WORKSPACE/patches/disttab-cxx17.patch"
-      - name: Modernize remaining C++17 removals across src/ (binary_function, bind2nd)
-        run: |
-          find /tmp/JAGS-4.3.1/src -name "*.cc" -o -name "*.h" -o -name "*.cpp" | while read f; do
-            perl -0pi -e 's/using std::binary_function;\n//g' "$f"
-            perl -0pi -e 's/: public binary_function<[^>]*>//g' "$f"
-            perl -pi -e 's/bind2nd\((\w+\(\)), /std::bind($1, std::placeholders::_1, /g' "$f"
-          done
-          grep -rn "binary_function\|bind2nd" /tmp/JAGS-4.3.1/src --include="*.cc" | head -5 || echo "clean"
-      - name: Configure JAGS for emscripten
-        working-directory: /tmp/JAGS-4.3.1
-        run: |
-          set -euo pipefail
-          # Actions run: uses a non-login shell — load the container's env profile
-          source /etc/profile 2>/dev/null || true
-          ls /etc/profile.d/ 2>/dev/null || true
-          for f in /etc/profile.d/*.sh; do source "$f" 2>/dev/null || true; done
-          env | grep -iE "em|flang|wasm" | head -20 || true
-          # lift the whole toolchain out of the WASM R Makeconf (explicit path — the
-          # container also has a native R whose Makeconf says gcc; found it the hard way)
-          MC=$(ls /opt/R/wasm/lib/R/etc/Makeconf 2>/dev/null || find /opt -name Makeconf -path "*wasm*etc*" 2>/dev/null | head -1)
-          test -n "$MC"
-          # strip $(MAKE_VAR) tokens — Makeconf flags carry them for R's package builds;
-          # outside make, emcc would treat them as input files ("$(LTO): No such file")
-          val() { grep -E "^$1 *=" "$MC" | head -1 | sed "s/^$1 *= *//" | sed 's/\$([^)]*)//g' ; }
-          export CC="$(val CC)" CXX="$(val CXX)" AR="$(val AR)" RANLIB="$(val RANLIB)"
-          # the wasm R Makeconf has no F77 (its Fortran comes prebuilt in libFortranRuntime.a);
-          # JAGS must COMPILE Fortran, so point at the container's wasm flang
-          export F77="$(val F77)" FC="$(val FC)" FLIBS="$(val FLIBS)"
-          if [ -z "$F77" ]; then
-            # webr's fortran-flang.mk: EMFC = $(HOST)/bin/flang — the host flang that emits wasm
-            FL=$(ls /opt/flang/host/bin/flang 2>/dev/null || find /opt/flang -name "flang" -type f 2>/dev/null | head -1)
-            echo "flang binary: $FL"
-            ls -la /opt/flang/host/bin 2>/dev/null | head
-            if [ -n "$FL" ]; then
-              export F77="$FL" FC="$FL"
-              export FFLAGS="$(val FFLAGS) -O2 -fwasm-exceptions" FCFLAGS="$(val FCFLAGS) -O2 -fwasm-exceptions"
-            fi
-          fi
-          echo "F77=$F77"
-          # everything ends up inside the rjags.so side module: ALL objects need PIC,
-          # but libtool strips -fPIC for static archives — force it here
-          export CFLAGS="$(val CFLAGS) -fPIC" CXXFLAGS="$(val CXXFLAGS) -fPIC" FFLAGS="$(val FFLAGS) -fPIC" FCFLAGS="$(val FCFLAGS) -fPIC" LDFLAGS="$(val LDFLAGS)"
-          echo "CC=$CC"; echo "F77=$F77"; echo "FLIBS=$FLIBS"
-          # JAGS hard-requires BLAS+LAPACK; use the wasm R's own copies
-          # the wasm R's own blas/lapack — find the real dir (R build layout varies)
-          RLIBDIR=/tmp/lapack-wasm/lib
-          test -f "$RLIBDIR/liblapack.a" || { echo "static lapack missing"; exit 1; }
-          echo "RLIBDIR=$RLIBDIR"; ls -la "$RLIBDIR" | head -8
-          # do NOT export LIBS globally: it leaks into the CC sanity check and fails it.
-          # The blas/lapack paths go to configure via --with-* flags only (used after the CC check).
-          ./configure --host=wasm32-unknown-emscripten \
-            --prefix=/tmp/jags-wasm-install \
-            --disable-dependency-tracking \
-            --with-blas="-L/tmp/BLAS-3.12.0 -lblas" \
-            --with-lapack="-L$RLIBDIR -llapack" \
-            2>&1 | tee configure.log
-      - name: Build
-        working-directory: /tmp/JAGS-4.3.1
-        run: |
-          set -euo pipefail
-          # libjags + jrmath + all 8 modules compile to wasm. The jags-terminal binary
-          # does NOT link (libtool dlpreopen is incompatible with emscripten) — and is
-          # not needed: rjags uses libjags + modules directly (Phase 1).
-          make -C libltdl -j2 2>&1 | tail -3
-          make -C src/jrmath -j2 2>&1 | tail -3
-          make -C src/lib -j2 2>&1 | tail -3
-          make -C src/modules -j2 2>&1 | tail -3
-      - name: Install to prefix (libjags, modules, headers)
-        working-directory: /tmp/JAGS-4.3.1
-        run: |
-          set -euo pipefail
-          P=/tmp/jags-wasm-install
-          mkdir -p $P/lib/jags/modules $P/include
-          cp -r src/include/* $P/include/
-          cp src/lib/.libs/libjags.a $P/lib/
-          cp src/jrmath/.libs/libjrmath.a $P/lib/
-          find src/modules -name "*.a" -path "*.libs*" -exec cp {} $P/lib/jags/modules/ \;
-          # Phase 1c: link each module as an emscripten SIDE MODULE (.so) — rjags's
-          # libltdl searches the module dir for <name>.so at runtime
-          # netlib lapack ships its own lsame/xerbla which collide with BLAS's
-          emar d /tmp/lapack-wasm/lib/liblapack.a lsame.o xerbla.o xerbla_array.o 2>/dev/null || true
-          for a in src/modules/*/.libs/lib*.a; do
-            n=$(basename $a .a)
-            # embed BLAS/LAPACK INSIDE each module: importing dtrmm_/dgemm_ from R's
-            # libRblas fails on ABI (signature mismatch); internal copies bind statically
-            em++ -s SIDE_MODULE=1 -s WASM_BIGINT -s ASSERTIONS=1 -fwasm-exceptions -s SUPPORT_LONGJMP=wasm -Oz \
-              -Wl,--whole-archive "$a" /tmp/BLAS-3.12.0/libblas.a /tmp/lapack-wasm/lib/liblapack.a /opt/flang/wasm/lib/libFortranRuntime.a -Wl,--no-whole-archive \
-              -o "$P/lib/jags/modules/${n}.so" 2>&1 | tail -2 || echo "side module $n FAILED"
-          done
-          ls -la $P/lib/jags/modules/ | head -25
-          find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" 2>/dev/null | head -3
-          find /tmp/JAGS-4.3.1/libltdl -name "libltdl*.a" -exec cp {} $P/lib/ \; 2>/dev/null || true
-          ls -la $P/lib $P/lib/jags/modules | head -20
-      - name: Phase 1 — assemble rjags (side-module rjags.so + R code with .onLoad)
-        run: |
-          set -euo pipefail
-          # rjags.so: the side-module build (pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz,
-          # libjags linked in). The JAGS modules stay separate side modules: they
-          # resolve their libjags imports against rjags.so because .onLoad loads it
-          # with library.dynam(local = FALSE). NEVER dyn.load(rjags.so) by hand
-          # first — that registers it RTLD_LOCAL, library.dynam then skips it, and
-          # every module dlopen dies with "TypeError: resolved is not a function".
-          # That tarball's R code predates the zzz.R generation (no .onLoad, the DLL
-          # never loads), so rebuild only the R code from the CRAN source here.
-          curl -fsSL -o /tmp/rjags-src.tar.gz "https://cran.r-project.org/src/contrib/rjags_4-16.tar.gz" || \
-            curl -fsSL -o /tmp/rjags-src.tar.gz "https://cran.r-project.org/src/contrib/Archive/rjags/rjags_4-16.tar.gz"
-          rm -rf /tmp/rjags-r /tmp/rjags-rlib /tmp/rjags-pkg && mkdir -p /tmp/rjags-r /tmp/rjags-rlib /tmp/rjags-pkg
-          tar xzf /tmp/rjags-src.tar.gz -C /tmp/rjags-r
-          cd /tmp/rjags-r/rjags
-          rm -rf configure configure.ac configure.win cleanup src
-          sed 's|@JAGS_MODDIR@|/tmp/jags-wasm-install/lib/jags/modules|' R/unix/zzz.R.in > R/unix/zzz.R
-          Rscript -e 'install.packages("coda", lib = "/tmp/rjags-rlib", repos = "https://cran.r-project.org", quiet = TRUE)'
-          R_LIBS=/tmp/rjags-rlib R CMD INSTALL --library=/tmp/rjags-rlib --no-test-load --no-docs --no-html --no-byte-compile /tmp/rjags-r/rjags
-          tar xzf "$GITHUB_WORKSPACE/pkgs/rjags_4-16_R_x86_64-pc-linux-gnu.tar.gz" -C /tmp/rjags-pkg
-          rm -rf /tmp/rjags-pkg/rjags/R
-          cp -r /tmp/rjags-rlib/rjags/R /tmp/rjags-pkg/rjags/R
-          Rscript -e 'e <- new.env(); lazyLoad("/tmp/rjags-pkg/rjags/R/rjags", envir = e); stopifnot(is.function(e$.onLoad))'
+          bash scripts/build-stack.sh "$STACK_OPT" /tmp/stack-out
           mkdir -p /tmp/rjags-out
-          tar czf /tmp/rjags-out/rjags_4-16.tgz -C /tmp/rjags-pkg rjags
-          ls -la /tmp/rjags-out/
-      - name: Phase 1 smoke test — production install path + toy MCMC (Node)
+          cp /tmp/stack-out/rjags_4-16.tgz /tmp/rjags-out/rjags_4-16.tgz
+          cat /tmp/stack-out/sizes.tsv
+          ls -la /tmp/jags-wasm-install/lib/jags/modules
+      # Production install path (fts-app installJagsPackage) in webr@0.6.0:
+      # toy + 20-study random-effects MA + regression (gc after a dropped model,
+      # dmnorm/dwish/inverse/%*%, glm logistic). Exits 1 unless all MCMC_OK.
+      - name: Smoke test — production install path + MCMC regression (Node)
         run: |
           set -euo pipefail
-          cat > /tmp/smoke.mjs <<'SMK'
-          import { WebR } from 'webr';
-          import fs from 'fs';
-          // mirrors fts-app installJagsPackage(): untar, jags.moddir, modules, library()
-          const webR = new WebR();
-          await webR.init();
-          const shelter = await new webR.Shelter();
-          const MODDIR = '/tmp/jags-wasm-install/lib/jags/modules';
-          await webR.installPackages(['coda'], { repos: ['https://prolytiq.github.io/r-wasm-pkgs/', 'https://repo.r-wasm.org/'], quiet: true });
-          await webR.FS.writeFile('/tmp/rjags-install.tgz', fs.readFileSync('/tmp/rjags-out/rjags_4-16.tgz'));
-          await shelter.evalR('untar("/tmp/rjags-install.tgz", exdir = .libPaths()[[1]], tar = "internal")');
-          await shelter.evalR(`options(jags.moddir = "${MODDIR}"); dir.create("${MODDIR}", recursive = TRUE)`);
-          for (const f of fs.readdirSync(MODDIR)) {
-            if (!f.endsWith('.so')) continue;
-            const bytes = fs.readFileSync(`${MODDIR}/${f}`);
-            await webR.FS.writeFile(`${MODDIR}/${f}`, bytes);
-            const alias = f.replace(/^lib/, '');
-            if (alias !== f) await webR.FS.writeFile(`${MODDIR}/${alias}`, bytes);
-          }
-          const o = await shelter.captureR(`r <- tryCatch({
-              suppressWarnings(library(rjags)); cat("modules:", list.modules(), "\n")
-              m <- jags.model(textConnection("model { y ~ dnorm(0,1) }"), n.chains = 1, quiet = TRUE)
-              s <- jags.samples(m, "y", 2000); cat("y mean:", mean(s$y), " sd:", sd(as.numeric(s$y)), "\n")
-              "MCMC_OK"
-            }, error = function(e) paste("ERROR:", conditionMessage(e)))
-            cat(r, "\n")`, { captureConditions: false, captureStreams: true });
-          const text = o.output.map((e) => String(e.data)).join('\n');
-          console.log(text);
-          process.exit(/MCMC_OK/.test(text) ? 0 : 1);
-          SMK
+          cp tests/bench.mjs /tmp/bench.mjs
           cd /tmp && npm init -y >/dev/null 2>&1; npm install webr@0.6.0 >/dev/null 2>&1
-          node /tmp/smoke.mjs
+          node /tmp/bench.mjs "$STACK_OPT" /tmp/rjags-out/rjags_4-16.tgz /tmp/jags-wasm-install/lib/jags/modules 1
       - name: Collect artifacts (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: jags-wasm-artifacts
           path: |
-            /tmp/JAGS-4.3.1/config.log
-            /tmp/JAGS-4.3.1/configure.log
-            /tmp/JAGS-4.3.1/build.log
             /tmp/jags-wasm-install/
             /tmp/rjags-out/
-          if-no-files-found: ignore
+            /tmp/module-link.log
+            /tmp/rjags-build.log
+          if-no-files-found: error
 
   deploy-wasm-repo:
     needs: build-libjags
